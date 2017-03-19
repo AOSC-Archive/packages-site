@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="content-type" content="text/html;charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}AOSC Packages{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/autocomplete.js"></script>
+</head>
+<body>
+<header class="nav">
+{% include 'nav.inc.html' %}
+</header>
+<form id="_searchbox" action="/search/" method="get">
+  <input name="q" placeholder="Search package">
+</form>
+<div class="container">
+<main>
+{% block main %}{% endblock %}
+</main>
+<footer>
+{% include 'footer.inc.html' %}
+</footer>
+</div>
+</body>
+</html>

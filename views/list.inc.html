@@ -1,0 +1,11 @@
+<table class="packages">
+<tbody>
+{% for pkg in packages -%}
+	<tr>
+		<td class="pkg-name">{{ pkg['name'] }}</td>
+		<td class="pkg-version">{{ pkg['version'] }}</td>
+	  <td class="pkg-description">{{ pkg['description'] }}</td>
+	</tr>
+{%- endfor %}
+</tbody>
+</table>

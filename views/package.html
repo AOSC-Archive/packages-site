@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ pkg['name'] }} - AOSC Packages{% endblock %}
+
+{% block main %}
+<div class="package" id="{{ pkg['name'] }}">
+<h1>{{ pkg['name'] }}
+<span class="pkg-version">{{ pkg['version'] }}</span>{% if pkg['release'] %}-<span class="pkg-version pkg-release">{{ pkg['release'] }}</span>{% endif %}
+</h1>
+<p class="pkg-section">in {{ pkg['category'] }}-{{ pkg['section'] }}</p>
+<p class="pkg-description">{{ pkg['description'] }}</p>
+{% for rel in dep_rel -%}
+{% if rel in pkg['dependency'] -%}<p>
+<b class="pkg-dep-rel">{{ dep_rel[rel] }}</b>:
+{% for dep in pkg['dependency'][rel] -%}
+<span class="pkg-dep"><a href="#{{ dep[0] }}">{{ dep[0] }}</a>{{ dep[1] }}</span>
+{% endfor %}
+</p>{%- endif %}
+{%- endfor %}
+<table class="packages">
+<thead>
+  <tr>
+    <th>Repo</th>
+    <th>Architecture</th>
+    <th>Version</th>
+    <th>Download</th>
+  </tr>
+</thead>
+<tbody>
+{% for dpkg in pkg['dpkg'] -%}
+  <tr>
+    <td class="dpkg-repo">{{ dpkg['repo'] }}</td>
+    <td class="dpkg-arch">{{ dpkg['architecture'] }}</td>
+    <td class="dpkg-ver dpkg-ver-{{ dpkg['ver_compare'] }}">{{ dpkg['version'] }}</td>
+    <td class="dpkg-down">...</td>
+  </tr>
+{%- endfor %}
+</tbody>
+</table>
+</div>
+{% endblock main %}
