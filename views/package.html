@@ -12,26 +12,28 @@
 {% if rel in pkg['dependency'] -%}<p>
 <b class="pkg-dep-rel">{{ dep_rel[rel] }}</b>:
 {% for dep in pkg['dependency'][rel] -%}
-<span class="pkg-dep"><a href="#{{ dep[0] }}">{{ dep[0] }}</a>{{ dep[1] }}</span>
+<span class="pkg-dep"><a href="{{ dep[0] }}">{{ dep[0] }}</a>{{ dep[1] }}</span>
 {% endfor %}
 </p>{%- endif %}
 {%- endfor %}
 <table class="packages">
 <thead>
   <tr>
-    <th>Repo</th>
-    <th>Architecture</th>
     <th>Version</th>
-    <th>Download</th>
+    {% for repo in pkg['repo'] -%}
+    <th>{{ repo }}</th>
+    {%- endfor %}
   </tr>
 </thead>
 <tbody>
-{% for dpkg in pkg['dpkg'] -%}
+{% for row in pkg['dpkg_matrix'] -%}
   <tr>
-    <td class="dpkg-repo">{{ dpkg['repo'] }}</td>
-    <td class="dpkg-arch">{{ dpkg['architecture'] }}</td>
-    <td class="dpkg-ver dpkg-ver-{{ dpkg['ver_compare'] }}">{{ dpkg['version'] }}</td>
-    <td class="dpkg-down">...</td>
+    <td class="dpkg-ver">{{ row[0] }}</td>
+    {% for col in row[1] -%}
+      {% if col -%}<td class="dpkg"><a>{{ col['size']|sizeof_fmt }}</a></td>
+      {%- else -%}<td class="dpkg dpkg-missing"></td>
+      {%- endif %}
+    {%- endfor %}
   </tr>
 {%- endfor %}
 </tbody>

@@ -251,14 +251,10 @@ function prefixSearch(trie, term){
   return matches;
 }
 document.addEventListener("DOMContentLoaded", function(event) {
-  var searchInput = document.querySelector('input[name="q"]');
-  var searchForm = document.getElementById('_searchbox');
-  /* var gotoPkg = function(term) {
-    searchInput.blur();
-    location.hash = "#" + term;
-  }; */
+  var searchInput = document.querySelector('input#searchinput');
+  var searchForm = document.getElementById('searchbox');
   var pkgComplete = new autoComplete({
-    selector: 'input[name="search"]',
+    selector: 'input#searchinput',
     minChars: 2,
     source: function(term, suggest){
       suggest(prefixSearch(pkgTrie, term));
@@ -267,14 +263,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
       // escape special characters
       search = search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
       var re = new RegExp("(" + search.split(' ').join('|') + ")", "gi");
-      return '<a class="autocomplete-suggestion" data-val="' + item + '" href="#' + item + '">' + item.replace(re, "<b>$1</b>") + '</a>';
-    } /* ,
-    onSelect: function(event, term, item) {
-      gotoPkg(term);
-    }*/
+      return '<a class="autocomplete-suggestion" data-val="' + item + '" href="' + item + '">' + item.replace(re, "<b>$1</b>") + '</a>';
+    }
   });
-  /* searchForm.onsubmit = function(){
-    gotoPkg(searchInput.value);
-    return false;
-  }; */
 });

@@ -5,6 +5,8 @@ import os
 import re
 import time
 import json
+import operator
+import itertools
 import functools
 import collections
 from debian_support import version_compare
@@ -22,7 +24,6 @@ LEFT JOIN (
   WHERE key = 'PKGEPOCH'
 ) spec
 ON spec.package = packages.name
-ORDER BY name
 '''
 
 SQL_GET_PACKAGE_INFO = '''
@@ -51,8 +52,9 @@ ORDER BY category, section, name
 '''
 
 SQL_GET_PACKAGE_DPKG = '''
-SELECT version, architecture, repo, maintainer, installed_size,
-filename, size, sha256 FROM dpkg_packages WHERE package = ?
+SELECT version, architecture, repo, filename, size
+FROM dpkg_packages WHERE package = ?
+ORDER BY version ASC, architecture ASC
 '''
 
 DEP_REL = collections.OrderedDict((
@@ -102,6 +104,14 @@ def response_lm(f_body=None, status=None, headers=None, modified=None, etag=None
     body = '' if bottle.request.method == 'HEAD' else f_body()
 
     return bottle.HTTPResponse(body, status, **headers)
+
+
+def sizeof_fmt(num, suffix='B'):
+    for unit in ['','Ki','Mi','Gi','Ti','Pi','Ei','Zi']:
+        if abs(num) < 1024:
+            return "%3.1f%s%s" % (num, unit, suffix)
+        num /= 1024.0
+    return "%.1f%s%s" % (num, 'Yi', suffix)
 
 
 def gen_trie(wordlist):
@@ -176,21 +186,36 @@ def pkgtrie(db):
         modified=db_last_modified(db))
 
 @app.route('/search/')
-def search():
-    ...
-    return bottle.jinja2_template('search.html')
+def search(db):
+    q = bottle.request.query.get('q')
+    packages = []
+    packages_set = set()
+    if q:
+        for row in db.execute(
+            SQL_GET_PACKAGES + " WHERE name LIKE ? ORDER BY name",
+            ('%%%s%%' % q,)):
+            if row['name'] == q:
+                bottle.redirect("/packages/" + q)
+            packages.append(dict(row))
+            packages_set.add(row['name'])
+        for row in db.execute(
+            SQL_GET_PACKAGES + " WHERE description LIKE ? ORDER BY name",
+            ('%%%s%%' % q,)):
+            if row['name'] not in packages_set:
+                packages.append(dict(row))
+    if packages:
+        return bottle.jinja2_template('search.html', q=q, packages=packages)
+    else:
+        return bottle.jinja2_template('error.html',
+            error='No packages matching "%s" found.' % q)
 
 @app.route('/packages/<name>')
 def package(name, db):
-    def compare_pkg(a, b):
-        if a['repo'] == b['repo']:
-            return -version_compare(a['version'], b['version'])
-        elif a['repo'] > b['repo']:
-            return 100
-        else:
-            return -100
-
-    pkg = dict(db.execute(SQL_GET_PACKAGE_INFO, (name,)).fetchone())
+    res = db.execute(SQL_GET_PACKAGE_INFO, (name,)).fetchone()
+    if res is None:
+        return bottle.HTTPResponse(bottle.jinja2_template('error.html',
+                error='Package "%s" not found.' % name), 404)
+    pkg = dict(res)
     dep_dict = {}
     fullver = pkg['version']
     if pkg['epoch']:
@@ -206,15 +231,35 @@ def package(name, db):
             else:
                 dep_dict[dep_rel] = [(dep_pkg, dep_ver)]
     pkg['dependency'] = dep_dict
-    dpkg_list = []
-    for row in db.execute(SQL_GET_PACKAGE_DPKG, (name,)):
-        d = dict(row)
-        d['ver_compare'] = VER_REL[
-            version_compare(row['version'], fullver)]
-        dpkg_list.append(d)
-    dpkg_list.sort(key=functools.cmp_to_key(compare_pkg))
-    pkg['dpkg'] = dpkg_list
-    return bottle.jinja2_template('package.html', pkg=pkg, dep_rel=DEP_REL)
+    dpkg_dict = {}
+    repo_list = set()
+    for ver, group in itertools.groupby(db.execute(
+        SQL_GET_PACKAGE_DPKG, (name,)), key=operator.itemgetter('version')):
+        table_row = {}
+        for row in group:
+            d = dict(row)
+            reponame = d['repo'][3:]
+            repo_list.add(reponame)
+            table_row[reponame] = d
+        dpkg_dict[ver] = table_row
+    if fullver not in dpkg_dict:
+        dpkg_dict[fullver] = {}
+    pkg['repo'] = repo_list = sorted(repo_list)
+    pkg['dpkg_matrix'] = [
+        (ver, [dpkg_dict[ver].get(reponame) for reponame in repo_list])
+        for ver in sorted(dpkg_dict.keys(),
+        key=functools.cmp_to_key(version_compare), reverse=True)]
+    return bottle.jinja2_template(
+        'package.html', pkg=pkg, dep_rel=DEP_REL,
+        template_settings={'filters': {'sizeof_fmt': sizeof_fmt}}
+    )
+
+@app.route('/lagging')
+def lagging(db):
+    res = db.execute(SQL_GET_PACKAGE_INFO, (name,)).fetchone()
+    if res is None:
+        return bottle.HTTPResponse(bottle.jinja2_template('error.html',
+                error='Package "%s" not found.' % name), 404)
 
 @app.route('/')
 def index():

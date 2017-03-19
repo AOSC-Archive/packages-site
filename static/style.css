@@ -67,7 +67,8 @@ p {
   margin: 0 0 .6em;
 }
 footer {
-  text-align: right;
+  margin-top: 3em;
+  text-align: center;
 }
 .autocomplete-suggestions {
   text-align: left;
@@ -108,9 +109,75 @@ footer {
   text-decoration: none;
   color: #333;
 }
-.dpkg-ver-old {
-  background-color: rgba(255, 255, 0, .12);
+@media (min-width: 768px) {
+.container {
+  width: 750px;
 }
-.dpkg-ver-same {
-  background-color: rgba(0, 255, 0, .12);
+}
+@media (min-width: 992px) {
+.container {
+  width: 970px;
+}
+}
+@media (min-width: 1200px) {
+.container {
+    width: 1098px;
+}
+}
+.container {
+  margin-right: auto;
+  margin-left: auto;
+  padding-left: 15px;
+  padding-right: 15px;
+}
+#nav {
+  border: none;
+  background-color: #32405a;
+  min-height: 45px;
+  margin-bottom: 20px;
+}
+#nav li {
+  display: inline-block;
+  font-size: 14px;
+  text-align: center;
+}
+.navbar-ul {
+  margin-top: 0;
+  padding: 0;
+  text-transform: uppercase;
+}
+.navbar-ul a {
+  color: #fff;
+  text-decoration: none;
+  display: block;
+  padding: 10px 15px;
+}
+#nav li.afe-primary {
+  margin-left: -15px;
+  font-size: 18px;
+  min-width: 100px;
+  background-color: #21324b;
+}
+#nav li.afe-highlight {
+  margin-right: -15px;
+  float: right;
+  font-size: 18px;
+  min-width: 100px;
+}
+
+#searchinput::placeholder {
+  color: #ddd;
+}
+#searchinput {
+  display: inline-block;
+  width: auto;
+  vertical-align: middle;
+  height: 38px;
+  padding: 3px 12px;
+  font-size: 14px;
+  line-height: 1.42857143;
+  color: #fff;
+  background-color: #475c81;
+  border: none;
+  outline: 0;
 }
