@@ -263,7 +263,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
       // escape special characters
       search = search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
       var re = new RegExp("(" + search.split(' ').join('|') + ")", "gi");
-      return '<a class="autocomplete-suggestion" data-val="' + item + '" href="' + item + '">' + item.replace(re, "<b>$1</b>") + '</a>';
+      return '<a class="autocomplete-suggestion" data-val="' + item + '" href="/packages/' + item + '">' + item.replace(re, "<b>$1</b>") + '</a>';
     }
   });
 });
