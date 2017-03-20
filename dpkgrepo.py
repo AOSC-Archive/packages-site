@@ -34,8 +34,7 @@ logging.basicConfig(
     format='%(asctime)s %(levelname).1s %(message)s', level=logging.INFO)
 
 # we don't have gpg, must be https
-# MIRROR = 'https://repo.aosc.io/'
-MIRROR = 'http://127.0.0.1/tuna/anthon/'
+MIRROR = 'https://repo.aosc.io/'
 REPOS = (
     ('os-amd64', 'os-amd64/os3-dpkg'),
     ('os-arm64', 'os-arm64/os3-dpkg'),
