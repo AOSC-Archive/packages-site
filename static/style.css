@@ -70,6 +70,24 @@ footer {
   margin-top: 3em;
   text-align: center;
 }
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  width: 100%;
+  max-width: 100%;
+  margin: 1em 0;
+}
+td, th {
+  border: 1px solid #ddd;
+  padding: .5em;
+}
+th {
+  text-align: left;
+  background-color: #f5f5f5;
+}
+tr {
+  background-color: #fff;
+}
 .autocomplete-suggestions {
   text-align: left;
   cursor: default;
@@ -134,7 +152,7 @@ footer {
   border: none;
   background-color: #32405a;
   min-height: 45px;
-  margin-bottom: 20px;
+  margin-bottom: 0;
 }
 #nav li {
   display: inline-block;
@@ -143,6 +161,7 @@ footer {
 }
 .navbar-ul {
   margin-top: 0;
+  margin-bottom: 0;
   padding: 0;
   text-transform: uppercase;
 }
@@ -164,7 +183,6 @@ footer {
   font-size: 18px;
   min-width: 100px;
 }
-
 #searchinput::placeholder {
   color: #ddd;
 }
@@ -180,4 +198,12 @@ footer {
   background-color: #475c81;
   border: none;
   outline: 0;
+}
+header.banner {
+  margin: 0;
+  background-color: #fff;
+  padding: 30px 0;
+}
+header.banner h1 {
+  margin: 0;
 }

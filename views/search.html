@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Search "{{ q|e }}" - AOSC Packages{% endblock %}
-
+{% block banner %}<h1>Search "{{ q|e }}"</h1>{% endblock %}
 {% block main %}
 {% include 'list.inc.html' %}
 {% endblock main %}

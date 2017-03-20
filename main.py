@@ -57,6 +57,30 @@ FROM dpkg_packages WHERE package = ?
 ORDER BY version ASC, architecture ASC
 '''
 
+SQL_GET_PACKAGE_LAGGING = '''
+SELECT
+ name, packages.version, spec.epoch, release, 
+ dpkg.versions dpkg_versions, description
+FROM packages
+LEFT JOIN (
+    SELECT
+      package,
+      value epoch
+    FROM package_spec
+    WHERE key = 'PKGEPOCH'
+  ) spec
+  ON spec.package = packages.name
+LEFT JOIN (
+    SELECT
+      package,
+      group_concat(version) versions
+    FROM dpkg_packages
+	WHERE repo = ?
+    GROUP BY package
+  ) dpkg
+  ON dpkg.package = packages.name
+'''
+
 DEP_REL = collections.OrderedDict((
     ('PKGDEP', 'Depends'),
     ('BUILDDEP', 'Depends (build)'),
@@ -173,6 +197,27 @@ db_last_modified.last_updated = 0
 db_last_modified.value = 0
 
 
+def db_repos(db, ttl=300):
+    now = time.monotonic()
+    if now - db_repos.last_updated > ttl:
+        row = {row['name'][3:]:row for row in
+               db.execute('SELECT name, path, date FROM dpkg_repos')}
+        db_repos.last_updated = now
+        db_repos.value = row
+    return db_repos.value
+db_repos.last_updated = 0
+db_repos.value = 0
+
+
+def makefullver(epoch, version, release):
+    v = version
+    if epoch:
+        v = '%s:%s' % (epoch, v)
+    if release:
+        v = '%s-%s' % (v, release)
+    return v
+
+
 @app.route('/static/<filename>')
 def server_static(filename):
     return bottle.static_file(filename, root='static')
@@ -217,11 +262,7 @@ def package(name, db):
                 error='Package "%s" not found.' % name), 404)
     pkg = dict(res)
     dep_dict = {}
-    fullver = pkg['version']
-    if pkg['epoch']:
-        fullver = '%s:%s' % (pkg['epoch'], fullver)
-    if pkg['release']:
-        fullver = '%s-%s' % (fullver, pkg['release'])
+    fullver = makefullver(pkg['epoch'], pkg['version'], pkg['release'])
     pkg['full_version'] = fullver
     if pkg['dependency']:
         for dep in pkg['dependency'].split(','):
@@ -238,7 +279,7 @@ def package(name, db):
         table_row = {}
         for row in group:
             d = dict(row)
-            reponame = d['repo'][3:]
+            reponame = d['repo'] = d['repo'][3:]
             repo_list.add(reponame)
             table_row[reponame] = d
         dpkg_dict[ver] = table_row
@@ -249,22 +290,38 @@ def package(name, db):
         (ver, [dpkg_dict[ver].get(reponame) for reponame in repo_list])
         for ver in sorted(dpkg_dict.keys(),
         key=functools.cmp_to_key(version_compare), reverse=True)]
+    repos = db_repos(db)
     return bottle.jinja2_template(
-        'package.html', pkg=pkg, dep_rel=DEP_REL,
+        'package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos,
         template_settings={'filters': {'sizeof_fmt': sizeof_fmt}}
     )
 
-@app.route('/lagging')
-def lagging(db):
-    res = db.execute(SQL_GET_PACKAGE_INFO, (name,)).fetchone()
-    if res is None:
+@app.route('/lagging/<repo>')
+def lagging(repo, db):
+    repos = db_repos(db)
+    if repo not in repos:
         return bottle.HTTPResponse(bottle.jinja2_template('error.html',
-                error='Package "%s" not found.' % name), 404)
+                error='Repo "%s" not found.' % name), 404)
+    packages = []
+    for row in db.execute(SQL_GET_PACKAGE_LAGGING, ('os-' + repo,)):
+        d = dict(row)
+        dpkg_versions = (d.pop('dpkg_versions') or '').split(',')
+        dpkg_versions.sort(key=functools.cmp_to_key(version_compare))
+        latest = dpkg_versions[-1]
+        fullver = makefullver(d['epoch'], d['version'], d['release'])
+        if latest != fullver:
+            d['dpkg_version'] = latest
+            d['full_version'] = fullver
+            packages.append(d)
+    if packages:
+        return bottle.jinja2_template('lagging.html', repo=repo, packages=packages)
+    else:
+        return bottle.jinja2_template('error.html',
+            error="There's no lagging packages.")
 
 @app.route('/')
 def index():
     return bottle.jinja2_template('index.html')
-
 
 
 def main(args):

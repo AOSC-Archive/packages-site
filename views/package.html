@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ pkg['name'] }} - AOSC Packages{% endblock %}
-
-{% block main %}
-<div class="package" id="{{ pkg['name'] }}">
-<h1>{{ pkg['name'] }}
+{% block banner %}<h1>{{ pkg['name'] }}
 <span class="pkg-version">{{ pkg['version'] }}</span>{% if pkg['release'] %}-<span class="pkg-version pkg-release">{{ pkg['release'] }}</span>{% endif %}
 </h1>
 <p class="pkg-section">in {{ pkg['category'] }}-{{ pkg['section'] }}</p>
 <p class="pkg-description">{{ pkg['description'] }}</p>
+{% endblock %}
+
+{% block main %}
+<div class="package" id="{{ pkg['name'] }}">
 {% for rel in dep_rel -%}
 {% if rel in pkg['dependency'] -%}<p>
 <b class="pkg-dep-rel">{{ dep_rel[rel] }}</b>:
@@ -30,8 +31,11 @@
   <tr>
     <td class="dpkg-ver">{{ row[0] }}</td>
     {% for col in row[1] -%}
-      {% if col -%}<td class="dpkg"><a>{{ col['size']|sizeof_fmt }}</a></td>
-      {%- else -%}<td class="dpkg dpkg-missing"></td>
+      {% if col -%}<td class="dpkg">
+        <a href="https://repo.aosc.io/{{ repos[col['repo']]['path'] }}/{{ col['filename'] }}">
+          {{ col['size']|sizeof_fmt }}
+        </a>
+      </td>{%- else -%}<td class="dpkg dpkg-missing"></td>
       {%- endif %}
     {%- endfor %}
   </tr>

@@ -8,8 +8,11 @@
 <script src="/static/autocomplete.js"></script>
 </head>
 <body>
-<header class="nav">
 {% include 'nav.inc.html' %}
+<header class="banner">
+<div class="container">
+{% block banner %}<h1>AOSC Packages</h1>{% endblock %}
+</div>
 </header>
 <div class="container">
 <main>
