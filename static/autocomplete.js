@@ -264,6 +264,9 @@ document.addEventListener("DOMContentLoaded", function(event) {
       search = search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
       var re = new RegExp("(" + search.split(' ').join('|') + ")", "gi");
       return '<a class="autocomplete-suggestion" data-val="' + item + '" href="/packages/' + item + '">' + item.replace(re, "<b>$1</b>") + '</a>';
+    },
+    onSelect: function(event, term, item) {
+      window.location.href = '/packages/' + term;
     }
   });
 });

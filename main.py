@@ -58,6 +58,31 @@ FROM dpkg_packages WHERE package = ?
 ORDER BY version ASC, architecture ASC
 '''
 
+SQL_GET_PACKAGE_NEW = '''
+SELECT
+ name, packages.version, spec.epoch, release, 
+ dpkg.versions dpkg_versions, description
+FROM packages
+LEFT JOIN (
+    SELECT
+      package,
+      value epoch
+    FROM package_spec
+    WHERE key = 'PKGEPOCH'
+  ) spec
+  ON spec.package = packages.name
+LEFT JOIN (
+    SELECT
+      package,
+      group_concat(version) versions
+    FROM dpkg_packages
+    GROUP BY package
+  ) dpkg
+  ON dpkg.package = packages.name
+ORDER BY packages.commit_time DESC
+LIMIT 10
+'''
+
 SQL_GET_PACKAGE_LAGGING = '''
 SELECT
  name, packages.version, spec.epoch, release, 
@@ -321,8 +346,19 @@ def lagging(repo, db):
             error="There's no lagging packages.")
 
 @app.route('/')
-def index():
-    return bottle.jinja2_template('index.html')
+def index(db):
+    updates = []
+    for row in db.execute(SQL_GET_PACKAGE_NEW):
+        d = dict(row)
+        dpkg_versions = (d.pop('dpkg_versions') or '').split(',')
+        dpkg_versions.sort(key=functools.cmp_to_key(version_compare))
+        latest = dpkg_versions[-1]
+        fullver = makefullver(d['epoch'], d['version'], d['release'])
+        if latest != fullver:
+            d['ver_compare'] = VER_REL[
+                version_compare(latest, fullver)]
+            updates.append(d)
+    return bottle.jinja2_template('index.html', updates=updates)
 
 
 def main(args):
