@@ -123,7 +123,7 @@ VER_REL = {
 
 RE_QUOTES = re.compile(r'"([a-z]+|\$)"')
 
-app = bottle.Bottle()
+application = app = bottle.Bottle()
 plugin = bottle.ext.sqlite.Plugin(dbfile='data/abbs.db')
 app.install(plugin)
 
