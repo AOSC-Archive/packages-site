@@ -3,12 +3,13 @@
 {% block banner %}<h1>{{ pkg['name'] }}
 <span class="pkg-version">{{ pkg['version'] }}</span>{% if pkg['release'] %}-<span class="pkg-version pkg-release">{{ pkg['release'] }}</span>{% endif %}
 </h1>
-<p class="pkg-section">in {{ pkg['category'] }}-{{ pkg['section'] }}</p>
 <p class="pkg-description">{{ pkg['description'] }}</p>
 {% endblock %}
 
 {% block main %}
 <div class="package" id="{{ pkg['name'] }}">
+<p>Source: <a href="https://github.com/AOSC-Dev/aosc-os-abbs/tree/staging/{{ pkg['category'] }}-{{ pkg['section'] }}/{{ pkg['directory'] }}/spec"><span class="pkg-section">{{ pkg['category'] }}-{{ pkg['section'] }}/{{ pkg['directory'] }}</span></a></p>
+<h2>Dependencies</h2>
 {% for rel in dep_rel -%}
 {% if rel in pkg['dependency'] -%}<p>
 <b class="pkg-dep-rel">{{ dep_rel[rel] }}</b>:
@@ -17,6 +18,7 @@
 {% endfor %}
 </p>{%- endif %}
 {%- endfor %}
+<h2>Available versions</h2>
 <table class="packages">
 <thead>
   <tr>

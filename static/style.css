@@ -30,11 +30,14 @@ a:visited {
 }
 .banner {
   margin: 0;
-  color: #3f5172;
+  color: #333;
+  background-color: #fff;
+  padding: 30px 0;
 }
 .banner h1 {
   font-size: 40px;
-  margin: 1em 0 .2em;
+  margin: .3em 0 .5em;
+  color: #3f5172;
 }
 .banner h2 {
   font-size: 20px;
@@ -55,16 +58,17 @@ a:visited {
 }
 .package h2 {
   font-size: 1.4em;
-  margin-bottom: 0;
+  margin-bottom: .5em;
 }
 .package .pkg-section {
-  display: block;
   color: #777;
-  font-size: .9em;
   margin: 0.2em 0 0.8em;
 }
 p {
   margin: 0 0 .6em;
+}
+main {
+  margin-top: 2em;
 }
 footer {
   margin-top: 3em;
@@ -73,6 +77,7 @@ footer {
 table {
   border-collapse: collapse;
   border-spacing: 0;
+  border: 1px solid #ddd;
   width: 100%;
   max-width: 100%;
   margin: 1em 0;
@@ -87,6 +92,10 @@ th {
 }
 tr {
   background-color: #fff;
+}
+.packages td {
+  border-left: none;
+  border-right: none;
 }
 .autocomplete-suggestions {
   text-align: left;
@@ -198,12 +207,4 @@ tr {
   background-color: #475c81;
   border: none;
   outline: 0;
-}
-header.banner {
-  margin: 0;
-  background-color: #fff;
-  padding: 30px 0;
-}
-header.banner h1 {
-  margin: 0;
 }
