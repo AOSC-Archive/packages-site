@@ -226,7 +226,7 @@ db_last_modified.value = 0
 def db_repos(db, ttl=300):
     now = time.monotonic()
     if now - db_repos.last_updated > ttl:
-        row = {row['name'][3:]:row for row in
+        row = {row['name']:row for row in
                db.execute('SELECT name, path, date FROM dpkg_repos')}
         db_repos.last_updated = now
         db_repos.value = row
@@ -305,9 +305,8 @@ def package(name, db):
         table_row = {}
         for row in group:
             d = dict(row)
-            reponame = d['repo'] = d['repo'][3:]
-            repo_list.add(reponame)
-            table_row[reponame] = d
+            repo_list.add(d['repo'])
+            table_row[d['repo']] = d
         dpkg_dict[ver] = table_row
     if fullver not in dpkg_dict:
         dpkg_dict[fullver] = {}
@@ -329,7 +328,7 @@ def lagging(repo, db):
         return bottle.HTTPResponse(bottle.jinja2_template('error.html',
                 error='Repo "%s" not found.' % name), 404)
     packages = []
-    for row in db.execute(SQL_GET_PACKAGE_LAGGING, ('os-' + repo,)):
+    for row in db.execute(SQL_GET_PACKAGE_LAGGING, (repo,)):
         d = dict(row)
         dpkg_versions = (d.pop('dpkg_versions') or '').split(',')
         dpkg_versions.sort(key=functools.cmp_to_key(version_compare))

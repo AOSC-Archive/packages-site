@@ -36,18 +36,18 @@ logging.basicConfig(
 # we don't have gpg, must be https
 MIRROR = 'https://repo.aosc.io/'
 REPOS = (
-    ('os-amd64', 'os-amd64/os3-dpkg'),
-    ('os-arm64', 'os-arm64/os3-dpkg'),
-    ('os-arm64-sunxi', 'os-arm64/sunxi/os3-dpkg'),
-    ('os-armel', 'os-armel/os3-dpkg'),
-    ('os-rpi2', 'os-armel/rpi2/os3-dpkg'),
-    ('os-standard-bsp', 'os-armel/standard-bsp/os3-dpkg'),
-    ('os-armel-sunxi', 'os-armel/sunxi/os3-dpkg'),
-    ('os-mips64el', 'os-mips64el/os3-dpkg'),
-    ('os-mipsel', 'os-mipsel/os3-dpkg'),
-    ('os-noarch', 'os-noarch/os3-dpkg'),
-    ('os-powerpc', 'os-powerpc/os3-dpkg'),
-    ('os-ppc64', 'os-ppc64/os3-dpkg')
+    ('amd64', 'os-amd64/os3-dpkg'),
+    ('arm64', 'os-arm64/os3-dpkg'),
+    ('arm64-sunxi', 'os-arm64/sunxi/os3-dpkg'),
+    ('armel', 'os-armel/os3-dpkg'),
+    ('rpi2', 'os-armel/rpi2/os3-dpkg'),
+    ('standard-bsp', 'os-armel/standard-bsp/os3-dpkg'),
+    ('armel-sunxi', 'os-armel/sunxi/os3-dpkg'),
+    ('mips64el', 'os-mips64el/os3-dpkg'),
+    ('mipsel', 'os-mipsel/os3-dpkg'),
+    ('noarch', 'os-noarch/os3-dpkg'),
+    ('powerpc', 'os-powerpc/os3-dpkg'),
+    ('ppc64', 'os-ppc64/os3-dpkg')
 )
 
 def init_db(cur):
