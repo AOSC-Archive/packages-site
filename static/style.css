@@ -92,6 +92,9 @@ th {
 tr {
   background-color: #fff;
 }
+.table-wrapper {
+  overflow: auto;
+}
 .packages td, .packages th {
   border-left: none;
   border-right: none;
@@ -195,10 +198,11 @@ tr {
   color: #ddd;
 }
 #searchinput {
+  box-sizing: border-box;
   display: inline-block;
   width: auto;
   vertical-align: middle;
-  height: 38px;
+  height: 45px;
   padding: 3px 12px;
   font-size: 14px;
   line-height: 1.42857143;
@@ -207,9 +211,29 @@ tr {
   border: none;
   outline: 0;
 }
+@media (max-width: 768px) {
+.container-navbar {
+  padding-left: 0;
+  padding-right: 0;
+}
+#nav li.afe-primary {
+  margin-left: 0;
+}
+#nav li.afe-highlight {
+  margin: 0;
+  float: none;
+  width: 100%;
+}
+#searchinput {
+  width: 100%;
+}
+}
 .dpkg-ver-old {
   background-color: rgba(255, 255, 0, .12);
 }
 .dpkg-ver-same {
   background-color: rgba(0, 255, 0, .12);
+}
+.dpkg-ver, .pkg-version {
+  white-space: nowrap;
 }

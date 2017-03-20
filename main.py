@@ -348,6 +348,8 @@ def lagging(repo, db):
 @app.route('/')
 def index(db):
     updates = []
+    total = db.execute('SELECT count(*) FROM packages').fetchone()[0]
+    archs = db.execute('SELECT count(DISTINCT architectures) FROM dpkg_repos').fetchone()[0]
     for row in db.execute(SQL_GET_PACKAGE_NEW):
         d = dict(row)
         dpkg_versions = (d.pop('dpkg_versions') or '').split(',')
@@ -358,7 +360,7 @@ def index(db):
             d['ver_compare'] = VER_REL[
                 version_compare(latest, fullver)]
             updates.append(d)
-    return bottle.jinja2_template('index.html', updates=updates)
+    return bottle.jinja2_template('index.html', total=total, archs=archs, updates=updates)
 
 
 def main(args):

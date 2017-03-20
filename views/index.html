@@ -1,4 +1,7 @@
 {% extends "base.html" %}
+{% block banner %}<h1>AOSC Packages</h1>
+<p>AOSC has a total of <span class="num">{{ total }}</span> packages{# across <span class="num">{{ archs }}</span> architectures #}.</p>
+{% endblock %}
 {% block main %}
 <h2>Latest Updates</h2>
 <table class="packages">
