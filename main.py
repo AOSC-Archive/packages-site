@@ -28,7 +28,7 @@ ON spec.package = packages.name
 
 SQL_GET_PACKAGE_INFO = '''
 SELECT
-  name, category, section, pkg_section, directory,
+  name, tree, category, section, pkg_section, directory,
   spec.epoch, version, release,
   description, commit_time, dep.dependency
 FROM packages

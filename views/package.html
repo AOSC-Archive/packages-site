@@ -8,11 +8,11 @@
 
 {% block main %}
 <div class="package" id="{{ pkg['name'] }}">
-<p>Source: <a href="https://github.com/AOSC-Dev/aosc-os-abbs/tree/staging/{{ pkg['category'] }}-{{ pkg['section'] }}/{{ pkg['directory'] }}/spec"><span class="pkg-section">{{ pkg['category'] }}-{{ pkg['section'] }}/{{ pkg['directory'] }}</span></a></p>
+<p><b class="pkg-field">Source</b>: <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/tree/{{ 'staging' if pkg['tree'] == 'aosc-os-abbs' else 'master' }}/{{ pkg['category'] }}-{{ pkg['section'] }}/{{ pkg['directory'] }}/spec"><span class="pkg-section">{{ pkg['category'] }}-{{ pkg['section'] }}/</span>{{ pkg['directory'] }}</a></p>
 <h2>Dependencies</h2>
 {% for rel in dep_rel -%}
 {% if rel in pkg['dependency'] -%}<p>
-<b class="pkg-dep-rel">{{ dep_rel[rel] }}</b>:
+<b class="pkg-field pkg-dep-rel">{{ dep_rel[rel] }}</b>:
 {% for dep in pkg['dependency'][rel] -%}
 <span class="pkg-dep"><a href="{{ dep[0] }}">{{ dep[0] }}</a>{{ dep[1] }}</span>
 {% endfor %}
