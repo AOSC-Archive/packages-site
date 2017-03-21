@@ -5,6 +5,9 @@ cd data/
 for repo in $REPOS; do
     if [ ! -d $repo ]; then
         git clone https://github.com/AOSC-Dev/$repo.git
+    else
+        cd $repo
+        git pull
     fi
     python3 $ABBS_META abbs.db $repo/ $repo
 done
