@@ -228,10 +228,10 @@ tr {
   width: 100%;
 }
 }
-.dpkg-ver-old {
+.dpkg-ver-old, .pkg-missing {
   background-color: rgba(255, 255, 0, .12);
 }
-.dpkg-ver-same {
+.dpkg-ver-same, .dpkg-ver-new {
   background-color: rgba(0, 255, 0, .12);
 }
 .dpkg-ver, .pkg-version {

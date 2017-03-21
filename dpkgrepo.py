@@ -89,7 +89,7 @@ def init_db(cur):
                 'FOREIGN KEY(package) REFERENCES dpkg_packages(package)'
                 ')')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_packages'
-                ' ON dpkg_packages (package)')
+                ' ON dpkg_packages (package, repo)')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_package_dependencies'
                 ' ON dpkg_package_dependencies (package)')
 

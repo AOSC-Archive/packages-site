@@ -11,8 +11,42 @@
     <td class="pkg-name">
       <a href="/packages/{{ pkg['name'] }}">{{ pkg['name'] }}</a>
     </td>
-    <td class="pkg-version dpkg-ver-{{ pkg['ver_compare'] }}">{{ pkg['version'] }}</td>
+    <td class="pkg-version dpkg-ver-{{ pkg['ver_compare'] }}">{{ pkg['full_version'] }}</td>
     <td class="pkg-description">{{ pkg['description'] }}</td>
+  </tr>
+{%- endfor %}
+</tbody>
+</table>
+<h2>Architectures</h2>
+<table class="packages">
+<tbody>
+  <tr>
+    <th>Repo</th>
+    <th>Package Number</th>
+    <th>Last Update</th>
+  </tr>
+{% for repo in repos -%}
+  <tr>
+    <td class="repo-name"><a href="/repo/{{ repo['name'] }}">{{ repo['name'] }}</a></td>
+    <td class="repo-pkgcount">
+      <a href="/lagging/{{ repo['name'] }}" class="num">{{ repo['pkgcount'] }}</a>
+      {% if repo['ghost'] -%}
+      + {{ repo['ghost'] }}
+      {%- endif %}
+    </td>
+    <td class="repo-date"><time datetime="{{ repo['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}"></time>{{ repo['date']|strftime('%Y-%m-%d %H:%M GMT') }}</td>
+  </tr>
+{%- endfor %}
+  <tr>
+    <th>Source Tree</th>
+    <th>Package Number</th>
+    <th>Last Update</th>
+  </tr>
+{% for tree in source_trees -%}
+  <tr>
+    <td class="repo-name"><a href="https://github.com/AOSC-Dev/{{ tree['name'] }}">{{ tree['name'] }}</a></td>
+    <td class="repo-pkgcount num">{{ tree['pkgcount'] }}</td>
+    <td class="repo-date"><time datetime="{{ tree['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}"></time>{{ tree['date']|strftime('%Y-%m-%d %H:%M GMT') }}</td>
   </tr>
 {%- endfor %}
 </tbody>

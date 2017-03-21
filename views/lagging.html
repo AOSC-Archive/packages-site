@@ -1,6 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Lagging packages in "{{ repo|e }}" - AOSC Packages{% endblock %}
-{% block banner %}<h1>Lagging packages in "{{ repo|e }}"</h1>{% endblock %}
+{% block title %}Lagging packages in "{{ repo }}" - AOSC Packages{% endblock %}
+{% block banner %}<h1>Lagging packages in "{{ repo }}"</h1>
+<p>Found <span class="num">{{ packages|length }} packages.</span></p>
+{% endblock %}
 {% block main %}
 <table class="packages">
 <thead>
@@ -14,9 +16,9 @@
 {% for pkg in packages -%}
   <tr>
   	<td class="pkg-name">
-			<a href="/packages/{{ pkg['name'] }}">{{ pkg['name'] }}</a>
-		</td>
-    <td class="pkg-version pkg-version-dpkg">{{ pkg['dpkg_version'] }}</td>
+      <a href="/packages/{{ pkg['name'] }}">{{ pkg['name'] }}</a>
+    </td>
+    <td class="pkg-version pkg-version-dpkg{{ '' if pkg['dpkg_version'] else ' pkg-missing' }}">{{ pkg['dpkg_version'] }}</td>
 		<td class="pkg-version">{{ pkg['full_version'] }}</td>
 	</tr>
 {%- endfor %}
