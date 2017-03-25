@@ -47,6 +47,14 @@ WHERE name = ?
 ORDER BY category, section, name
 '''
 
+SQL_GET_PACKAGE_INFO_GHOST = '''
+SELECT DISTINCT
+  package name, '' tree, '' category, '' section, '' pkg_section,
+  '' directory, '' epoch, '' version, '' release,
+  '' description, NULL commit_time, '' dependency
+FROM dpkg_packages WHERE package = ?
+'''
+
 SQL_GET_PACKAGE_DPKG = '''
 SELECT version, architecture, repo, filename, size
 FROM dpkg_packages WHERE package = ?
@@ -327,6 +335,9 @@ def search(db):
                 bottle.redirect("/packages/" + q)
             packages.append(dict(row))
             packages_set.add(row['name'])
+        row = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (q,)).fetchone()
+        if row:
+            bottle.redirect("/packages/" + q)
         for row in db.execute(
             SQL_GET_PACKAGES + " WHERE description LIKE ? ORDER BY name",
             ('%%%s%%' % q,)):
@@ -341,13 +352,18 @@ def search(db):
 @app.route('/packages/<name>')
 def package(name, db):
     res = db.execute(SQL_GET_PACKAGE_INFO, (name,)).fetchone()
+    pkgintree = True
+    if res is None:
+        res = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (name,)).fetchone()
+        pkgintree = False
     if res is None:
         return bottle.HTTPResponse(jinja2_template('error.html',
                 error='Package "%s" not found.' % name), 404)
     pkg = dict(res)
     dep_dict = {}
-    fullver = makefullver(pkg['epoch'], pkg['version'], pkg['release'])
-    pkg['full_version'] = fullver
+    if pkgintree:
+        fullver = makefullver(pkg['epoch'], pkg['version'], pkg['release'])
+        pkg['full_version'] = fullver
     if pkg['dependency']:
         for dep in pkg['dependency'].split(','):
             dep_pkg, dep_ver, dep_rel = dep.split('|')
@@ -366,7 +382,7 @@ def package(name, db):
             repo_list.add(d['repo'])
             table_row[d['repo']] = d
         dpkg_dict[ver] = table_row
-    if fullver not in dpkg_dict:
+    if pkgintree and fullver not in dpkg_dict:
         dpkg_dict[fullver] = {}
     pkg['repo'] = repo_list = sorted(repo_list)
     pkg['dpkg_matrix'] = [
