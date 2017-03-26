@@ -1,5 +1,5 @@
 #!/bin/bash
-REPOS="aosc-os-core aosc-os-abbs"
+REPOS="aosc-os-core aosc-os-abbs aosc-os-arm-bsps"
 ABBS_META="../../abbs-meta/abbsmeta.py"
 cd data/
 for repo in $REPOS; do

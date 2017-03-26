@@ -87,7 +87,7 @@ ORDER BY packages.name
 
 SQL_GET_PACKAGE_NEW = '''
 SELECT
-  name, packages.version, spec.epoch, release, 
+  name, packages.version, spec.epoch, release,
   dpkg.versions dpkg_versions, description
 FROM packages
 LEFT JOIN (
@@ -112,7 +112,7 @@ LIMIT 10
 
 SQL_GET_PACKAGE_LAGGING = '''
 SELECT
-  name, packages.version, spepoch.value epoch, release, 
+  name, packages.version, spepoch.value epoch, release,
   dpkg.versions dpkg_versions, description
 FROM packages
 LEFT JOIN package_spec spepoch
@@ -131,6 +131,40 @@ LEFT JOIN (
   ON dpkg.package = packages.name
 WHERE (dpkg.repo IS 'noarch' OR ? != 'noarch') AND
   ((spabhost.value IS 'noarch') = (dpkg.repo IS 'noarch'))
+ORDER BY name
+'''
+
+SQL_GET_PACKAGE_GHOST = '''
+SELECT package name, group_concat(version) dpkg_versions
+FROM dpkg_packages
+WHERE repo = ? AND name NOT IN (SELECT name FROM packages)
+GROUP BY name
+'''
+
+SQL_GET_PACKAGE_TREE = '''
+SELECT
+  name, packages.version, spec.epoch, release,
+  dpkg.versions dpkg_versions, dpkg.repos dpkg_availrepos, description
+FROM packages
+LEFT JOIN (
+    SELECT
+      package,
+      value epoch
+    FROM package_spec
+    WHERE key = 'PKGEPOCH'
+  ) spec
+  ON spec.package = packages.name
+LEFT JOIN (
+    SELECT
+      package,
+      group_concat(version) versions,
+	  group_concat(DISTINCT repo) repos
+    FROM dpkg_packages
+    GROUP BY package
+  ) dpkg
+  ON dpkg.package = packages.name
+WHERE tree = ?
+ORDER BY name
 '''
 
 SQL_GET_REPO_COUNT = '''
@@ -151,6 +185,11 @@ LEFT JOIN package_spec spabhost
   ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
 WHERE ((spabhost.value IS 'noarch') = (dpkg.repo IS 'noarch'))
 GROUP BY dpkg_repos.name ORDER BY pkgcount + ifnull(ghost, 0) DESC
+'''
+
+SQL_GET_TREES = '''
+SELECT tree name, max(commit_time) date, count(name) pkgcount
+FROM packages GROUP BY tree ORDER BY pkgcount DESC
 '''
 
 DEP_REL = collections.OrderedDict((
@@ -275,7 +314,7 @@ def render_html(**kwargs):
     return template.render(**kvars)
 
 
-def db_last_modified(db, ttl=300):
+def db_last_modified(db, ttl=3600):
     now = time.monotonic()
     if now - db_last_modified.last_updated > ttl:
         row = db.execute(
@@ -289,7 +328,7 @@ db_last_modified.last_updated = 0
 db_last_modified.value = 0
 
 
-def db_repos(db, ttl=300):
+def db_repos(db, ttl=3600):
     now = time.monotonic()
     if now - db_repos.last_updated > ttl:
         d = collections.OrderedDict((row['name'], dict(row))
@@ -299,6 +338,18 @@ def db_repos(db, ttl=300):
     return db_repos.value
 db_repos.last_updated = 0
 db_repos.value = {}
+
+
+def db_trees(db, ttl=3600):
+    now = time.monotonic()
+    if now - db_trees.last_updated > ttl:
+        d = collections.OrderedDict((row['name'], dict(row))
+            for row in db.execute(SQL_GET_TREES))
+        db_trees.last_updated = now
+        db_trees.value = d
+    return db_trees.value
+db_trees.last_updated = 0
+db_trees.value = {}
 
 
 def makefullver(epoch, version, release):
@@ -415,6 +466,49 @@ def lagging(repo, db):
         return jinja2_template('error.html',
             error="There's no lagging packages.")
 
+@app.route('/ghost/<repo>')
+def ghost(repo, db):
+    repos = db_repos(db)
+    if repo not in repos:
+        return bottle.HTTPResponse(jinja2_template('error.html',
+                error='Repo "%s" not found.' % name), 404)
+    packages = []
+    for row in db.execute(SQL_GET_PACKAGE_GHOST, (repo,)):
+        d = dict(row)
+        dpkg_versions = (d.pop('dpkg_versions') or '').split(',')
+        latest = max(dpkg_versions, key=version_compare_key)
+        d['dpkg_version'] = latest
+        packages.append(d)
+    if packages:
+        return jinja2_template('ghost.html', repo=repo, packages=packages)
+    else:
+        return jinja2_template('error.html',
+            error="There's no ghost packages.")
+
+@app.route('/tree/<tree>')
+def tree(tree, db):
+    trees = db_trees(db)
+    if tree not in trees:
+        return bottle.HTTPResponse(jinja2_template('error.html',
+                error='Source tree "%s" not found.' % name), 404)
+    packages = []
+    for row in db.execute(SQL_GET_PACKAGE_TREE, (tree,)):
+        d = dict(row)
+        dpkg_versions = (d.pop('dpkg_versions') or '').split(',')
+        latest = max(dpkg_versions, key=version_compare_key)
+        d['dpkg_version'] = latest
+        d['dpkg_repos'] = ', '.join((d.pop('dpkg_availrepos') or '').split(','))
+        fullver = makefullver(d['epoch'], d['version'], d['release'])
+        d['full_version'] = fullver
+        d['ver_compare'] = VER_REL[
+            version_compare(latest, fullver) if latest else -1]
+        packages.append(d)
+    if packages:
+        return jinja2_template('tree.html', tree=tree, packages=packages)
+    else:
+        return jinja2_template('error.html',
+            error="There's no ghost packages.")
+
 @app.route('/repo/<repo>')
 def repo(repo, db):
     repos = db_repos(db)
@@ -430,18 +524,16 @@ def repo(repo, db):
         d['dpkg_version'] = latest
         d['full_version'] = fullver
         d['ver_compare'] = VER_REL[
-            version_compare(latest, fullver)]
+            version_compare(latest, fullver) if latest else -1]
         packages.append(d)
     return jinja2_template('repo.html', repo=repo, packages=packages)
 
 @app.route('/')
 def index(db):
     repos = list(db_repos(db).values())
-    source_trees = list(db.execute(
-        'SELECT tree name, max(commit_time) date, count(name) pkgcount'
-        ' FROM packages GROUP BY tree ORDER BY pkgcount DESC'))
+    source_trees = list(db_trees(db).values())
     updates = []
-    total = sum(r[-1] for r in source_trees)
+    total = sum(r['pkgcount'] for r in source_trees)
     for row in db.execute(SQL_GET_PACKAGE_NEW):
         d = dict(row)
         dpkg_versions = (d.pop('dpkg_versions') or '').split(',')

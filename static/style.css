@@ -234,6 +234,6 @@ tr {
 .dpkg-ver-same, .dpkg-ver-new {
   background-color: rgba(0, 255, 0, .12);
 }
-.dpkg-ver, .pkg-version {
+.pkg-name, .dpkg-ver, .pkg-version {
   white-space: nowrap;
 }
