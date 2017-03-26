@@ -447,11 +447,10 @@ def index(db):
         dpkg_versions = (d.pop('dpkg_versions') or '').split(',')
         latest = max(dpkg_versions, key=version_compare_key)
         fullver = makefullver(d['epoch'], d['version'], d['release'])
-        if not latest or version_compare(latest, fullver) < 0:
-            d['full_version'] = fullver
-            d['ver_compare'] = VER_REL[
-                version_compare(latest, fullver)]
-            updates.append(d)
+        d['full_version'] = fullver
+        d['ver_compare'] = VER_REL[
+            version_compare(latest, fullver) if latest else -1]
+        updates.append(d)
     return jinja2_template('index.html',
            total=total, repos=repos, source_trees=source_trees,
            updates=updates)
