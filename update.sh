@@ -7,6 +7,8 @@ for repo in $REPOS; do
         git clone https://github.com/AOSC-Dev/$repo.git
     else
         pushd $repo
+        git fetch --all
+        git reset --hard origin/master
         git pull
         popd
     fi
