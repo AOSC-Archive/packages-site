@@ -3,7 +3,7 @@
 <p>AOSC has a total of <span class="num">{{ total }}</span> packages{# across <span class="num">{{ archs }}</span> architectures #}.</p>
 {% endblock %}
 {% block main %}
-<h2>Latest Updates (staging)</h2>
+<h2>Latest Updates</h2>
 <table class="packages">
 <tbody>
 {% for pkg in updates -%}
@@ -17,6 +17,7 @@
 {%- endfor %}
 </tbody>
 </table>
+{% include 'legend.inc.html' %}
 <h2>Architectures</h2>
 <table class="packages">
 <tbody>
@@ -29,10 +30,10 @@
   <tr>
     <td class="repo-name"><a href="/repo/{{ repo['name'] }}">{{ repo['name'] }}</a></td>
     <td class="repo-pkgcount">
-      <a href="/lagging/{{ repo['name'] }}" class="num" title="Show packages not available in {{ repo['name'] }}">{{ repo['pkgcount'] }}</a>
-      {% if repo['ghost'] -%}
-      + <a href="/ghost/{{ repo['name'] }}" class="num" title="Show {{ repo['name'] }} packages not found in source tree">{{ repo['ghost'] }}</a>
-      {%- endif %}
+      <span class="num">{{ repo['pkgcount'] }}</span>
+      (<a href="/lagging/{{ repo['name'] }}" title="Show packages not available in {{ repo['name'] }}">lagging</a>{% if repo['ghost'] %}
+      | <a href="/ghost/{{ repo['name'] }}" class="num" title="Show {{ repo['name'] }} packages not found in source tree">{{ repo['ghost'] }} ghost</a>
+      {%- endif %})
     </td>
     <td class="repo-date"><time datetime="{{ repo['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}"></time>{{ repo['date']|strftime('%Y-%m-%d %H:%M GMT') }}</td>
   </tr>

@@ -237,3 +237,6 @@ tr {
 .dpkg-ver, .pkg-version {
   white-space: nowrap;
 }
+.w45 {
+  width: 45%;
+}
