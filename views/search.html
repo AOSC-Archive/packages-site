@@ -3,5 +3,17 @@
 {% block banner %}<h1>Search "{{ q }}"</h1>
 <p>Found <span class="num">{{ packages|length }} packages.</span></p>{% endblock %}
 {% block main %}
-{% include 'list.inc.html' %}
+<table class="packages">
+<tbody>
+{% for pkg in packages -%}
+  <tr>
+    <td class="pkg-name">
+      <a href="/packages/{{ pkg['name'] }}">{{ pkg['name'] }}</a>
+    </td>
+    <td class="pkg-version">{{ pkg['full_version'] or pkg['version'] }}</td>
+    <td class="pkg-description">{{ pkg['description'] }}</td>
+  </tr>
+{%- endfor %}
+</tbody>
+</table>
 {% endblock main %}
