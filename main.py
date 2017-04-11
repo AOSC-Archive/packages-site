@@ -316,7 +316,8 @@ def render_html(**kwargs):
 
 def db_last_modified(db, ttl=3600):
     now = time.monotonic()
-    if now - db_last_modified.last_updated > ttl:
+    if (not db_last_modified.last_updated or
+        now - db_last_modified.last_updated > ttl):
         row = db.execute(
             'SELECT commit_time FROM packages ORDER BY commit_time DESC LIMIT 1'
             ).fetchone()
@@ -330,7 +331,8 @@ db_last_modified.value = 0
 
 def db_repos(db, ttl=3600):
     now = time.monotonic()
-    if now - db_repos.last_updated > ttl:
+    if (not db_last_modified.last_updated or
+        now - db_repos.last_updated > ttl):
         d = collections.OrderedDict((row['name'], dict(row))
             for row in db.execute(SQL_GET_REPO_COUNT))
         db_repos.last_updated = now
