@@ -88,6 +88,18 @@ def init_db(cur):
                 'PRIMARY KEY (package, version, architecture, repo, relationship),'
                 'FOREIGN KEY(package) REFERENCES dpkg_packages(package)'
                 ')')
+    cur.execute('CREATE TABLE IF NOT EXISTS dpkg_package_duplicate ('
+                'package TEXT,'
+                'version TEXT,'
+                'architecture TEXT,'
+                'repo TEXT,'
+                'maintainer TEXT,'
+                'installed_size INTEGER,'
+                'filename TEXT,'
+                'size INTEGER,'
+                'sha256 TEXT,'
+                'PRIMARY KEY (repo, filename)'
+                ')')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_packages'
                 ' ON dpkg_packages (package, repo)')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_package_dependencies'
@@ -121,22 +133,31 @@ def package_update(cur, repo, path, size, sha256):
     assert hashlib.sha256(req.content).hexdigest() == sha256
     pkgs = lzma.decompress(req.content).decode('utf-8')
     del req
-    packages = set()
+    packages = {}
+    cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo = ?', (repo,))
     for pkg in deb822.Packages.iter_paragraphs(pkgs):
         name = pkg['Package']
         arch = pkg['Architecture']
         ver = pkg['Version']
         pkgtuple = (name, ver, arch, repo)
-        if pkgtuple in packages:
-            logging.warning('duplicate package: %r', pkgtuple)
-            continue
-        else:
-            packages.add(pkgtuple)
-        cur.execute('REPLACE INTO dpkg_packages VALUES (?,?,?,?,?,?,?,?,?)', (
+        pkginfo = (
             name, ver, arch, repo, pkg.get('Maintainer'),
             int(pkg['Installed-Size']) if 'Installed-Size' in pkg else None, 
             pkg['Filename'], int(pkg['Size']), pkg.get('SHA256')
-        ))
+        )
+        if pkgtuple in packages:
+            logging.warning('duplicate package: %r', pkgtuple)
+            cur.execute(
+                'REPLACE INTO dpkg_package_duplicate VALUES (?,?,?,?,?,?,?,?,?)',
+                packages[pkgtuple])
+            cur.execute(
+                'REPLACE INTO dpkg_package_duplicate VALUES (?,?,?,?,?,?,?,?,?)',
+                pkginfo)
+            if pkg['Filename'] < packages[pkgtuple][6]:
+                continue
+        packages[pkgtuple] = pkginfo
+        cur.execute('REPLACE INTO dpkg_packages VALUES (?,?,?,?,?,?,?,?,?)',
+                    pkginfo)
         oldrels = frozenset(row[0] for row in cur.execute(
             'SELECT relationship FROM dpkg_package_dependencies'
             ' WHERE package = ? AND version = ? AND architecture = ? AND repo = ?',
@@ -161,7 +182,7 @@ def package_update(cur, repo, path, size, sha256):
         'SELECT package, version, architecture, repo FROM dpkg_packages'
         ' WHERE repo = ?', (repo,)
     ))
-    for pkg in packages_old.difference(packages):
+    for pkg in packages_old.difference(packages.keys()):
         cur.execute('DELETE FROM dpkg_packages WHERE package = ? AND version = ?'
                     ' AND architecture = ? AND repo = ?', pkg)
         cur.execute('DELETE FROM dpkg_package_dependencies WHERE package = ?'
