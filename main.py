@@ -281,25 +281,6 @@ def gen_trie(wordlist):
     return trie
 
 
-def read_db(filename):
-    db = sqlite3.connect(filename)
-    db.row_factory = sqlite3.Row
-    cur = db.cursor()
-    packages = []
-    for row in cur.execute(SQL_GET_PACKAGES):
-        pkg = dict(row)
-        dep_dict = {}
-        if row[-1]:
-            for dep in row[-1].split(','):
-                dep_pkg, dep_ver, dep_rel = dep.split('|')
-                if dep_rel in dep_dict:
-                    dep_dict[dep_rel].append((dep_pkg, dep_ver))
-                else:
-                    dep_dict[dep_rel] = [(dep_pkg, dep_ver)]
-        pkg['dependency'] = dep_dict
-        packages.append(pkg)
-    return packages
-
 def render_html(**kwargs):
     jinjaenv = jinja2.Environment(loader=jinja2.FileSystemLoader(
         os.path.normpath(os.path.join(os.path.dirname(__file__), 'templates'))))
@@ -451,7 +432,7 @@ def lagging(repo, db):
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(jinja2_template('error.html',
-                error='Repo "%s" not found.' % name), 404)
+                error='Repo "%s" not found.' % repo), 404)
     packages = []
     for row in db.execute(SQL_GET_PACKAGE_LAGGING, (repo, repo)):
         d = dict(row)
@@ -473,7 +454,7 @@ def ghost(repo, db):
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(jinja2_template('error.html',
-                error='Repo "%s" not found.' % name), 404)
+                error='Repo "%s" not found.' % repo), 404)
     packages = []
     for row in db.execute(SQL_GET_PACKAGE_GHOST, (repo,)):
         d = dict(row)
@@ -492,7 +473,7 @@ def tree(tree, db):
     trees = db_trees(db)
     if tree not in trees:
         return bottle.HTTPResponse(jinja2_template('error.html',
-                error='Source tree "%s" not found.' % name), 404)
+                error='Source tree "%s" not found.' % tree), 404)
     packages = []
     for row in db.execute(SQL_GET_PACKAGE_TREE, (tree,)):
         d = dict(row)
@@ -516,7 +497,7 @@ def repo(repo, db):
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(jinja2_template('error.html',
-                error='Repo "%s" not found.' % name), 404)
+                error='Repo "%s" not found.' % repo), 404)
     packages = []
     for row in db.execute(SQL_GET_PACKAGE_REPO, (repo, repo)):
         d = dict(row)
