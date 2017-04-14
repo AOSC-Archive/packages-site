@@ -1,0 +1,3 @@
+{% for pkg in packages -%}
+{{ pkg['filename'] }}	{{ pkg['removereason']|join(',') }}
+{% endfor %}
