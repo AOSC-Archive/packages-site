@@ -192,6 +192,60 @@ SELECT tree name, max(commit_time) date, count(name) pkgcount
 FROM packages GROUP BY tree ORDER BY pkgcount DESC
 '''
 
+SQL_GET_DEB_LIST_HASARCH = '''
+SELECT
+  dp.package, dp.version, repo, filename,
+  (spabhost.value IS 'noarch') noarch,
+  (packages.name IS NULL) outoftree,
+  dpnoarch.versions noarchver
+FROM (
+  SELECT package, version, repo, filename FROM dpkg_packages
+  UNION
+  SELECT package, version, repo, filename FROM dpkg_package_duplicate
+) dp
+LEFT JOIN packages ON packages.name = dp.package
+LEFT JOIN package_spec spabhost
+  ON spabhost.package = dp.package AND spabhost.key = 'ABHOST'
+LEFT JOIN (
+    SELECT
+      package,
+      group_concat(version) versions
+    FROM dpkg_packages
+    WHERE repo = 'noarch'
+    GROUP BY package
+  ) dpnoarch
+  ON dpnoarch.package = dp.package
+WHERE repo = ?
+ORDER BY dp.package
+'''
+
+SQL_GET_DEB_LIST_NOARCH = '''
+SELECT
+  dp.package, dp.version, repo, filename,
+  (spabhost.value IS 'noarch') noarch,
+  (packages.name IS NULL) outoftree,
+  dparch.versions hasarchver
+FROM (
+  SELECT package, version, repo, filename FROM dpkg_packages
+  UNION
+  SELECT package, version, repo, filename FROM dpkg_package_duplicate
+) dp
+LEFT JOIN packages ON packages.name = dp.package
+LEFT JOIN package_spec spabhost
+  ON spabhost.package = dp.package AND spabhost.key = 'ABHOST'
+LEFT JOIN (
+    SELECT
+      package,
+      group_concat(version) versions
+    FROM dpkg_packages
+    WHERE repo != 'noarch'
+    GROUP BY package
+  ) dparch
+  ON dparch.package = dp.package
+WHERE repo = ?
+ORDER BY dp.package
+'''
+
 DEP_REL = collections.OrderedDict((
     ('PKGDEP', 'Depends'),
     ('BUILDDEP', 'Depends (build)'),
@@ -510,6 +564,66 @@ def repo(repo, db):
             version_compare(latest, fullver) if latest else -1]
         packages.append(d)
     return jinja2_template('repo.html', repo=repo, packages=packages)
+
+_debcompare_key = functools.cmp_to_key(lambda a, b:
+    (version_compare(a['version'], b['version'])
+     or cmp(a['filename'], b['filename'])))
+
+@app.route('/cleanmirror/<repo>')
+def cleanmirror(repo, db):
+    try:
+        retain = int(bottle.request.query.get('retain', 0))
+    except ValueError:
+        retain = 0
+    reason = bottle.request.query.get('reason')
+    reason = frozenset(reason.split(',')) if reason else None
+    getall = bool(bottle.request.query.get('all'))
+
+    repos = db_repos(db)
+    if repo not in repos:
+        return bottle.HTTPResponse(jinja2_template('error.html',
+                error='Repo "%s" not found.' % repo), 404)
+    debs = []
+    for package, group in itertools.groupby(
+            db.execute(SQL_GET_DEB_LIST_HASARCH
+                if repo != 'noarch' else SQL_GET_DEB_LIST_NOARCH, (repo,)),
+            key=operator.itemgetter('package')):
+        debgroup = sorted(map(dict, group), key=_debcompare_key)
+        latest = debgroup[-1]
+        latestver = latest['version']
+        if retain:
+            debgroup = debgroup[:-retain]
+            if not debgroup:
+                continue
+        for deb in debgroup:
+            removereason = []
+            if deb['version'] != latestver:
+                removereason.append('old')
+            elif deb['filename'] != latest['filename']:
+                removereason.append('dup')
+            if deb['outoftree']:
+                removereason.append('outoftree')
+            elif repo != 'noarch':
+                if (deb['noarch'] and deb['noarchver']
+                    and version_compare(deb['version'],
+                        max(deb['noarchver'].split(','),
+                        key=version_compare_key)) < 0):
+                    if 'old' not in removereason:
+                        removereason.append('old')
+                    removereason.append('noarch')
+            elif (not deb['noarch'] and deb['hasarchver']
+                  and version_compare(deb['version'],
+                      max(deb['hasarchver'].split(','),
+                      key=version_compare_key)) < 0):
+                removereason.append('hasarch')
+            deb['removereason'] = removereason
+            if reason:
+                if reason.intersection(frozenset(removereason)):
+                    debs.append(deb)
+            elif getall or removereason:
+                debs.append(deb)
+    bottle.response.content_type = 'text/plain; charset=UTF8'
+    return jinja2_template('cleanmirror.txt', repo=repo, packages=debs)
 
 @app.route('/')
 def index(db):
