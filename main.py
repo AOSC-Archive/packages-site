@@ -321,6 +321,12 @@ jinja2_settings = {
 }
 jinja2_template = functools.partial(bottle.jinja2_template,
     template_settings=jinja2_settings)
+render = lambda *args, **kwargs: (
+    kwargs
+    if (bottle.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or bottle.request.query.get('type') == 'json')
+    else jinja2_template(*args, **kwargs)
+)
 
 
 def gen_trie(wordlist):
@@ -432,9 +438,9 @@ def search(db):
             if row['name'] not in packages_set:
                 packages.append(dict(row))
     if packages:
-        return jinja2_template('search.html', q=q, packages=packages)
+        return render('search.html', q=q, packages=packages)
     else:
-        return jinja2_template('error.html',
+        return render('error.html',
             error='No packages matching "%s" found.' % q)
 
 @app.route('/packages/<name>')
@@ -445,7 +451,7 @@ def package(name, db):
         res = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (name,)).fetchone()
         pkgintree = False
     if res is None:
-        return bottle.HTTPResponse(jinja2_template('error.html',
+        return bottle.HTTPResponse(render('error.html',
                 error='Package "%s" not found.' % name), 404)
     pkg = dict(res)
     dep_dict = {}
@@ -478,14 +484,14 @@ def package(name, db):
         for ver in sorted(dpkg_dict.keys(),
         key=version_compare_key, reverse=True)]
     repos = db_repos(db)
-    return jinja2_template(
+    return render(
         'package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
 
 @app.route('/lagging/<repo>')
 def lagging(repo, db):
     repos = db_repos(db)
     if repo not in repos:
-        return bottle.HTTPResponse(jinja2_template('error.html',
+        return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
     for row in db.execute(SQL_GET_PACKAGE_LAGGING, (repo, repo)):
@@ -498,16 +504,16 @@ def lagging(repo, db):
             d['full_version'] = fullver
             packages.append(d)
     if packages:
-        return jinja2_template('lagging.html', repo=repo, packages=packages)
+        return render('lagging.html', repo=repo, packages=packages)
     else:
-        return jinja2_template('error.html',
+        return render('error.html',
             error="There's no lagging packages.")
 
 @app.route('/ghost/<repo>')
 def ghost(repo, db):
     repos = db_repos(db)
     if repo not in repos:
-        return bottle.HTTPResponse(jinja2_template('error.html',
+        return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
     for row in db.execute(SQL_GET_PACKAGE_GHOST, (repo,)):
@@ -517,16 +523,16 @@ def ghost(repo, db):
         d['dpkg_version'] = latest
         packages.append(d)
     if packages:
-        return jinja2_template('ghost.html', repo=repo, packages=packages)
+        return render('ghost.html', repo=repo, packages=packages)
     else:
-        return jinja2_template('error.html',
+        return render('error.html',
             error="There's no ghost packages.")
 
 @app.route('/tree/<tree>')
 def tree(tree, db):
     trees = db_trees(db)
     if tree not in trees:
-        return bottle.HTTPResponse(jinja2_template('error.html',
+        return bottle.HTTPResponse(render('error.html',
                 error='Source tree "%s" not found.' % tree), 404)
     packages = []
     for row in db.execute(SQL_GET_PACKAGE_TREE, (tree,)):
@@ -541,16 +547,16 @@ def tree(tree, db):
             version_compare(latest, fullver) if latest else -1]
         packages.append(d)
     if packages:
-        return jinja2_template('tree.html', tree=tree, packages=packages)
+        return render('tree.html', tree=tree, packages=packages)
     else:
-        return jinja2_template('error.html',
+        return render('error.html',
             error="There's no ghost packages.")
 
 @app.route('/repo/<repo>')
 def repo(repo, db):
     repos = db_repos(db)
     if repo not in repos:
-        return bottle.HTTPResponse(jinja2_template('error.html',
+        return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
     for row in db.execute(SQL_GET_PACKAGE_REPO, (repo, repo)):
@@ -563,7 +569,7 @@ def repo(repo, db):
         d['ver_compare'] = VER_REL[
             version_compare(latest, fullver) if latest else -1]
         packages.append(d)
-    return jinja2_template('repo.html', repo=repo, packages=packages)
+    return render('repo.html', repo=repo, packages=packages)
 
 _debcompare_key = functools.cmp_to_key(lambda a, b:
     (version_compare(a['version'], b['version'])
@@ -581,7 +587,7 @@ def cleanmirror(repo, db):
 
     repos = db_repos(db)
     if repo not in repos:
-        return bottle.HTTPResponse(jinja2_template('error.html',
+        return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     debs = []
     for package, group in itertools.groupby(
@@ -623,7 +629,7 @@ def cleanmirror(repo, db):
             elif getall or removereason:
                 debs.append(deb)
     bottle.response.content_type = 'text/plain; charset=UTF8'
-    return jinja2_template('cleanmirror.txt', repo=repo, packages=debs)
+    return render('cleanmirror.txt', repo=repo, packages=debs)
 
 @app.route('/')
 def index(db):
@@ -640,7 +646,7 @@ def index(db):
         d['ver_compare'] = VER_REL[
             version_compare(latest, fullver) if latest else -1]
         updates.append(d)
-    return jinja2_template('index.html',
+    return render('index.html',
            total=total, repos=repos, source_trees=source_trees,
            updates=updates)
 
