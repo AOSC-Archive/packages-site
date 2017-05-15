@@ -13,6 +13,8 @@ from debian_support import version_compare as _version_compare
 
 import jinja2
 import bottle
+import toposort
+import graphviz
 import bottle.ext.sqlite
 
 SQL_GET_PACKAGES = '''
@@ -244,6 +246,11 @@ LEFT JOIN (
   ON dparch.package = dp.package
 WHERE repo = ?
 ORDER BY dp.package
+'''
+
+SQL_GET_PACKAGE_REV_REL = '''
+SELECT package, version, relationship FROM package_dependencies
+WHERE dependency = ? AND (relationship == 'PKGDEP' OR relationship == 'BUILDDEP')
 '''
 
 DEP_REL = collections.OrderedDict((
@@ -650,6 +657,75 @@ def index(db):
            total=total, repos=repos, source_trees=source_trees,
            updates=updates)
 
+class DependencyProperties:
+    __slots__ = ['PKGDEP', 'BUILDDEP', 'depth', 'version']
+    def __init__(self):
+        self.PKGDEP = False
+        self.BUILDDEP = False
+        self.depth = None
+        self.version = None
+
+def find_revdep(db, name, deps, rels, depth=0):
+    if name in deps:
+        return
+    else:
+        deps[name] = set()
+        if rels[name].depth is None:
+            rels[name].depth = depth
+        else:
+            rels[name].depth = min(rels[name].depth, depth)
+    for dep_pkg, dep_ver, dep_rel in db.execute(SQL_GET_PACKAGE_REV_REL, (name,)):
+        deps[name].add(dep_pkg)
+        setattr(rels[dep_pkg], dep_rel, True)
+        rels[dep_pkg].version = rels[dep_pkg].version or dep_ver
+        find_revdep(db, dep_pkg, deps, rels, depth + 1)
+
+def render_graph(name, tree, deps, rels):
+    g = graphviz.Digraph(
+        name='%s reverse dependencies' % name,
+        format='svg', engine='sfdp',
+        node_attr={'shape': 'box'},
+        edge_attr={'color': 'grey', 'dir': 'back'}
+    )
+    g.graph_attr['rankdir'] = 'TB'
+    g.graph_attr['overlap'] = 'prism'
+    for k, v in rels.items():
+        attr = {}
+        if v.version:
+            attr['xlabel'] = v.version
+        elif k == name:
+            attr['shape'] = 'diamond'
+            attr['style'] = 'rounded'
+        elif v.BUILDDEP and not v.PKGDEP:
+            attr['style'] = 'rounded'
+        if attr:
+            g.node(k, **attr)
+    for k, row in deps.items():
+        for v in row:
+            g.edge(k, v)
+    g.body.append('{rank=same; "%s"}' % name)
+    for k, layer in enumerate(tree):
+        if len(layer) < 2:
+            continue
+        g.body.append('{rank=same; %s}' % '; '.join('"%s"' % x for x in layer))
+    return g.pipe()
+
+@app.route('/revdep/<name>')
+def revdep(name, db):
+    res = db.execute('SELECT 1 FROM packages WHERE name = ?', (name,)).fetchone()
+    pkgintree = True
+    if res is None:
+        return bottle.HTTPResponse(render('error.html',
+                error='Package "%s" not found.' % name), 404)
+    dep_pkgs = set()
+    deps = {}
+    rels = collections.defaultdict(DependencyProperties)
+    find_revdep(db, name, deps, rels)
+    try:
+        tree = [sorted(layer) for layer in toposort.toposort(deps)]
+    except toposort.CircularDependencyError:
+        tree = [sorted(x[0] for x in group) for k, group in itertools.groupby(rels.items(), key=lambda x: x[1].depth)]
+    return render_graph(name, tree, deps, rels)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')

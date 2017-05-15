@@ -2,3 +2,5 @@ requests
 jinja2
 bottle
 bottle-sqlite
+toposort
+graphviz
