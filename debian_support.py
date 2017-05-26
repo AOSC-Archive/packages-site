@@ -24,7 +24,7 @@ import os
 import re
 import types
 
-from debian.deprecation import function_deprecated_by
+import warnings
 
 try:
     import apt_pkg
@@ -51,6 +51,20 @@ except ImportError:
                     " implementation because it depends on OpenSSL, which"
                     " may not be linked with this library due to license"
                     " incompatibilities")
+
+def function_deprecated_by(func):
+    """ Return a function that warns it is deprecated by another function.
+
+        Returns a new function that warns it is deprecated by function
+        ``func``, then acts as a pass-through wrapper for ``func``.
+
+        """
+    func_name = func.__name__
+    warn_msg = "Use %(func_name)s instead" % vars()
+    def deprecated_func(*args, **kwargs):
+        warnings.warn(warn_msg, DeprecationWarning, stacklevel=2)
+        return func(*args, **kwargs)
+    return deprecated_func
 
 class ParseError(Exception):
     """An exception which is used to signal a parse failure.
