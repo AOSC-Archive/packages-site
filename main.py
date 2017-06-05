@@ -683,31 +683,31 @@ def find_revdep(db, name, deps, rels, depth=0):
 def render_graph(name, tree, deps, rels):
     g = graphviz.Digraph(
         name='%s reverse dependencies' % name,
-        format='svg', engine='sfdp',
-        node_attr={'shape': 'box'},
-        edge_attr={'color': 'grey', 'dir': 'back'}
+        format='svg',
+        node_attr={'shape': 'box', 'fontcolor': 'black', 'margin': '0.2,0.1'},
+        edge_attr={'color': 'grey', 'dir': 'back', 'arrowtail': 'none'}
     )
-    g.graph_attr['rankdir'] = 'TB'
-    g.graph_attr['overlap'] = 'prism'
+    g.graph_attr['rankdir'] = 'LR'
     for k, v in rels.items():
         attr = {}
         if v.version:
             attr['xlabel'] = v.version
         elif k == name:
-            attr['shape'] = 'diamond'
-            attr['style'] = 'rounded'
+            attr['fontcolor'] = 'blue'
+            attr['style'] = 'box'
         elif v.BUILDDEP and not v.PKGDEP:
-            attr['style'] = 'rounded'
+            attr['fontcolor'] = 'red'
+            attr['style'] = 'box'
         if attr:
             g.node(k, **attr)
     for k, row in deps.items():
         for v in row:
             g.edge(k, v)
-    g.body.append('{rank=same; "%s"}' % name)
+    g.body.append('{"%s"}' % name)
     for k, layer in enumerate(tree):
         if len(layer) < 2:
             continue
-        g.body.append('{rank=same; %s}' % '; '.join('"%s"' % x for x in layer))
+        g.body.append('{%s}' % '; '.join('"%s"' % x for x in layer))
     return g.pipe()
 
 @app.route('/revdep/<name>')
