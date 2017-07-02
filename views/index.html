@@ -22,8 +22,8 @@
 <table class="packages">
 <tbody>
   <tr>
-    <th>Repo</th>
-    <th>Package Number</th>
+    <th>Repository</th>
+    <th>Package Count</th>
     <th>Last Update</th>
   </tr>
 {% for repo in repos -%}
@@ -39,15 +39,15 @@
   </tr>
 {%- endfor %}
   <tr>
-    <th>Source Tree</th>
-    <th>Package Number</th>
+    <th>Source Trees</th>
+    <th>Package Count</th>
     <th>Last Update</th>
   </tr>
 {% for tree in source_trees -%}
   <tr>
     <td class="repo-name"><a href="https://github.com/AOSC-Dev/{{ tree['name'] }}">{{ tree['name'] }}</a></td>
     <td class="repo-pkgcount"><a href="/tree/{{ tree['name'] }}" class="num" title="Show packages in {{ tree['name'] }}">{{ tree['pkgcount'] }}</a></td>
-    <td class="repo-date"><time datetime="{{ tree['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}"></time>{{ tree['date']|strftime('%Y-%m-%d %H:%M GMT') }}</td>
+    <td class="repo-date"><time datetime="{{ tree['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}"></time>{{ tree['date']|strftime('%Y-%m-%d %H:%M UTC') }}</td>
   </tr>
 {%- endfor %}
 </tbody>
