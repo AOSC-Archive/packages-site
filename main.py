@@ -88,8 +88,7 @@ ORDER BY packages.name
 
 SQL_GET_PACKAGE_NEW = '''
 SELECT
-  name, packages.version version, spec.epoch epoch, release,
-  dpkg.versions dpkg_versions, description
+  name, packages.version version, spec.epoch epoch, release, description
 FROM packages
 LEFT JOIN (
     SELECT
@@ -99,14 +98,6 @@ LEFT JOIN (
     WHERE key = 'PKGEPOCH'
   ) spec
   ON spec.package = packages.name
-LEFT JOIN (
-    SELECT
-      package,
-      group_concat(version) versions
-    FROM dpkg_packages
-    GROUP BY package
-  ) dpkg
-  ON dpkg.package = packages.name
 ORDER BY packages.commit_time DESC
 LIMIT 10
 '''
@@ -640,12 +631,8 @@ def index(db):
     total = sum(r['pkgcount'] for r in source_trees)
     for row in db.execute(SQL_GET_PACKAGE_NEW):
         d = dict(row)
-        dpkg_versions = (d.pop('dpkg_versions') or '').split(',')
-        latest = max(dpkg_versions, key=version_compare_key)
         fullver = makefullver(d['epoch'], d['version'], d['release'])
         d['full_version'] = fullver
-        d['ver_compare'] = VER_REL[
-            version_compare(latest, fullver) if latest else -1]
         updates.append(d)
     return render('index.html',
            total=total, repos=repos, source_trees=source_trees,
