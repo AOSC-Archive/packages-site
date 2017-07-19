@@ -24,8 +24,8 @@ LEFT JOIN package_spec spepoch
 SQL_GET_PACKAGE_INFO = '''
 SELECT
   name, tree, category, section, pkg_section, directory,
-  spec.epoch, version, release,
-  description, commit_time, dep.dependency
+  spec.epoch epoch, version, release,
+  description, commit_time, dep.dependency dependency
 FROM packages
 LEFT JOIN (
     SELECT
@@ -63,8 +63,9 @@ ORDER BY version ASC, architecture ASC
 
 SQL_GET_PACKAGE_REPO = '''
 SELECT
-  packages.name, packages.version, spepoch.value epoch, packages.release,
-  dpkg.versions dpkg_versions, packages.description
+  packages.name name, packages.version version, spepoch.value epoch,
+  packages.release release, dpkg.versions dpkg_versions,
+  packages.description description
 FROM packages
 LEFT JOIN package_spec spepoch
   ON spepoch.package = packages.name AND spepoch.key = 'PKGEPOCH'
@@ -87,7 +88,7 @@ ORDER BY packages.name
 
 SQL_GET_PACKAGE_NEW = '''
 SELECT
-  name, packages.version, spec.epoch, release,
+  name, packages.version version, spec.epoch epoch, release,
   dpkg.versions dpkg_versions, description
 FROM packages
 LEFT JOIN (
@@ -112,7 +113,7 @@ LIMIT 10
 
 SQL_GET_PACKAGE_LAGGING = '''
 SELECT
-  name, packages.version, spepoch.value epoch, release,
+  name, packages.version version, spepoch.value epoch, release,
   dpkg.versions dpkg_versions, description
 FROM packages
 LEFT JOIN package_spec spepoch
@@ -143,7 +144,7 @@ GROUP BY name
 
 SQL_GET_PACKAGE_TREE = '''
 SELECT
-  name, packages.version, spec.epoch, release,
+  name, packages.version version, spec.epoch epoch, release,
   dpkg.versions dpkg_versions, dpkg.repos dpkg_availrepos, description
 FROM packages
 LEFT JOIN (
@@ -169,7 +170,7 @@ ORDER BY name
 
 SQL_GET_REPO_COUNT = '''
 SELECT
-  dpkg_repos.name, path, date, count(packages.name) pkgcount,
+  dpkg_repos.name name, path, date, count(packages.name) pkgcount,
   sum(CASE WHEN packages.name IS NULL THEN 1 END) ghost
 FROM dpkg_repos
 LEFT JOIN (
@@ -194,7 +195,7 @@ FROM packages GROUP BY tree ORDER BY pkgcount DESC
 
 SQL_GET_DEB_LIST_HASARCH = '''
 SELECT
-  dp.package, dp.version, repo, filename,
+  dp.package package, dp.version version, repo, filename,
   (spabhost.value IS 'noarch') noarch,
   (packages.name IS NULL) outoftree,
   dpnoarch.versions noarchver
@@ -221,7 +222,7 @@ ORDER BY dp.package
 
 SQL_GET_DEB_LIST_NOARCH = '''
 SELECT
-  dp.package, dp.version, repo, filename,
+  dp.package package, dp.version version, repo, filename,
   (spabhost.value IS 'noarch') noarch,
   (packages.name IS NULL) outoftree,
   dparch.versions hasarchver
