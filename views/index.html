@@ -35,7 +35,7 @@
       | <a href="/ghost/{{ repo['name'] }}" class="num" title="Show {{ repo['name'] }} packages not found in source tree">{{ repo['ghost'] }} ghost</a>
       {%- endif %})
     </td>
-    <td class="repo-date"><time datetime="{{ repo['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}"></time>{{ repo['date']|strftime('%Y-%m-%d %H:%M GMT') }}</td>
+    <td class="repo-date"><time datetime="{{ repo['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}"></time>{{ repo['date']|strftime('%Y-%m-%d %H:%M UTC') }}</td>
   </tr>
 {%- endfor %}
   <tr>
