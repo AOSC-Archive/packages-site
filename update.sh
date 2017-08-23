@@ -3,15 +3,18 @@ REPOS="aosc-os-core aosc-os-abbs aosc-os-arm-bsps"
 ABBS_META="../../abbs-meta/abbsmeta.py"
 cd data/
 for repo in $REPOS; do
-    if [ ! -d $repo ]; then
-        git clone https://github.com/AOSC-Dev/$repo.git
+    if [ ! -d $repo.git ]; then
+        git clone --mirror https://github.com/AOSC-Dev/$repo.git
     else
-        pushd $repo
-        git fetch --all
-        git reset --hard origin/master
-        git pull
+        pushd $repo.git
+        git remote update
         popd
     fi
-    python3 $ABBS_META abbs.db $repo/ $repo
 done
+python3 $ABBS_META -p . -m . -d abbs.db -b master -B master \
+    -c base -u 'https://github.com/AOSC-Dev/aosc-os-core' -P 0 aosc-os-core
+python3 $ABBS_META -p . -m . -d abbs.db -b staging,master,bugfix -B staging \
+    -c base -u 'https://github.com/AOSC-Dev/aosc-os-abbs' -P 1 aosc-os-abbs
+python3 $ABBS_META -p . -m . -d abbs.db -b master -B master \
+    -c bsp -u 'https://github.com/AOSC-Dev/aosc-os-arm-bsps' -P 2 aosc-os-arm-bsps
 python3 ../dpkgrepo.py abbs.db

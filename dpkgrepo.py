@@ -18,42 +18,58 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 # MA 02110-1301, USA.
 
+import os
 import lzma
 import sqlite3
 import hashlib
 import logging
 import calendar
+import collections
 import urllib.parse
 from email.utils import parsedate
 
 import requests
 
 import deb822
+from utils import version_compare
 
 logging.basicConfig(
     format='%(asctime)s %(levelname).1s %(message)s', level=logging.INFO)
 
+Repo = collections.namedtuple('Repo', 'name path source_tree category testing')
+
 # we don't have gpg, must be https
-MIRROR = 'https://repo.aosc.io/'
+MIRROR = os.environ.get('REPO_MIRROR', 'https://repo.aosc.io/')
 REPOS = (
-    ('amd64', 'os-amd64/os3-dpkg'),
-    ('arm64', 'os-arm64/os3-dpkg'),
-    ('arm64-sunxi', 'os-arm64/sunxi/os3-dpkg'),
-    ('armel', 'os-armel/os3-dpkg'),
-    ('rpi2', 'os-armel/rpi2/os3-dpkg'),
-    # ('standard-bsp', 'os-armel/standard-bsp/os3-dpkg'),
-    ('armel-sunxi', 'os-armel/sunxi/os3-dpkg'),
-    ('mips64el', 'os-mips64el/os3-dpkg'),
-    ('mipsel', 'os-mipsel/os3-dpkg'),
-    ('noarch', 'os-noarch/os3-dpkg'),
-    ('powerpc', 'os-powerpc/os3-dpkg'),
-    ('ppc64', 'os-ppc64/os3-dpkg')
+    Repo('amd64', 'os-amd64/os3-dpkg', None, 'base', 0),
+    Repo('amd64', 'os-amd64/testing/os-amd64/os3-dpkg', None, 'base', 1),
+    Repo('arm64', 'os-arm64/os3-dpkg', None, 'base', 0),
+    Repo('arm64', 'os-arm64/testing/os-arm64/os3-dpkg', None, 'base', 1),
+    Repo('arm64-sunxi', 'os-arm64/sunxi/os3-dpkg', 'aosc-os-arm-bsps', 'bsp', 0),
+    Repo('arm64-sunxi', 'os-arm64/sunxi/testing/os-arm64/os3-dpkg', 'aosc-os-arm-bsps', 'bsp', 1),
+    Repo('armel', 'os-armel/os3-dpkg', None, 'base', 0),
+    Repo('armel', 'os-armel/testing/os-armel/os3-dpkg', None, 'base', 1),
+    Repo('armel-sunxi', 'os-armel/sunxi/os3-dpkg', 'aosc-os-arm-bsps', 'bsp', 0),
+    Repo('armel-sunxi', 'os-armel/sunxi/testing/os-armel/os3-dpkg', 'aosc-os-arm-bsps', 'bsp', 1),
+    Repo('mips64el', 'os-mips64el/os3-dpkg', None, 'base', 0),
+    Repo('mips64el', 'os-mips64el/testing/os-mips64el/os3-dpkg', None, 'base', 1),
+    Repo('mipsel', 'os-mipsel/os3-dpkg', None, 'base', 0),
+    Repo('mipsel', 'os-mipsel/testing/os-mipsel/os3-dpkg', None, 'base', 1),
+    Repo('noarch', 'os-noarch/os3-dpkg', None, 'base', 0),
+    Repo('noarch', 'os-noarch/testing/os-noarch/os3-dpkg', None, 'base', 1),
+    Repo('powerpc', 'os-powerpc/os3-dpkg', None, 'base', 0),
+    Repo('powerpc', 'os-powerpc/testing/os-powerpc/os3-dpkg', None, 'base', 1),
+    Repo('ppc64', 'os-ppc64/os3-dpkg', None, 'base', 0),
+    Repo('ppc64', 'os-ppc64/testing/os-ppc64/os3-dpkg', None, 'base', 1)
 )
 
 def init_db(cur):
     cur.execute('CREATE TABLE IF NOT EXISTS dpkg_repos ('
                 'name TEXT PRIMARY KEY,'
                 'path TEXT,'
+                'source_tree TEXT,' # abbs tree
+                'category TEXT,' # base, bsp, overlay
+                'testing INTEGER,' # 0, 1
                 'origin TEXT,'
                 'label TEXT,'
                 'suite TEXT,'
@@ -100,19 +116,35 @@ def init_db(cur):
                 'sha256 TEXT,'
                 'PRIMARY KEY (repo, filename)'
                 ')')
+    cur.execute('CREATE TABLE IF NOT EXISTS dpkg_repo_stats ('
+                'name TEXT PRIMARY KEY,'
+                'packagecnt INTEGER,'
+                'missingcnt INTEGER,'
+                'laggingcnt INTEGER,'
+                'ghostcnt INTEGER,'
+                'FOREIGN KEY(name) REFERENCES packages(name)'
+                ')')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_packages'
                 ' ON dpkg_packages (package, repo)')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_package_dependencies'
                 ' ON dpkg_package_dependencies (package)')
 
-def release_update(cur, repo, path):
-    url = urllib.parse.urljoin(MIRROR, path.rstrip('/') + '/Release')
+def release_update(cur, repo):
+    url = urllib.parse.urljoin(MIRROR, repo.path.rstrip('/') + '/Release')
     req = requests.get(url, timeout=120)
-    req.raise_for_status()
+    if req.status_code == 404:
+        # testing not available
+        logging.error('dpkg source %s not found' % repo.path)
+        cur.execute('REPLACE INTO dpkg_repos VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?)',
+            (repo.name, repo.path, repo.source_tree, repo.category, repo.testing,
+            None, None, None, None, None, None, None, None, None))
+        return 0, None
+    else:
+        req.raise_for_status()
     rel = deb822.Release(req.text)
-    cur.execute('REPLACE INTO dpkg_repos VALUES (?,?,?,?,?,?,?,?,?,?,?)', (
-        repo, path, rel.get('Origin'), rel.get('Label'),
-        rel.get('Suite'), rel.get('Codename'),
+    cur.execute('REPLACE INTO dpkg_repos VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?)', (
+        repo.name, repo.path, repo.source_tree, repo.category, repo.testing,
+        rel.get('Origin'), rel.get('Label'), rel.get('Suite'), rel.get('Codename'),
         calendar.timegm(parsedate(rel['Date'])) if 'Date' in rel else None,
         calendar.timegm(parsedate(rel['Valid-Until'])) if 'Valid-Until' in rel else None,
         rel.get('Architectures'), rel.get('Components'), rel.get('Description')
@@ -125,8 +157,8 @@ _relationship_fields = ('depends', 'pre-depends', 'recommends',
         'suggests', 'breaks', 'conflicts', 'provides', 'replaces',
         'enhances')
 
-def package_update(cur, repo, path, size, sha256):
-    url = urllib.parse.urljoin(MIRROR, path.rstrip('/') + '/Packages.xz')
+def package_update(cur, repo, size, sha256):
+    url = urllib.parse.urljoin(MIRROR, repo.path.rstrip('/') + '/Packages.xz')
     req = requests.get(url, timeout=120)
     req.raise_for_status()
     assert len(req.content) == size
@@ -134,14 +166,14 @@ def package_update(cur, repo, path, size, sha256):
     pkgs = lzma.decompress(req.content).decode('utf-8')
     del req
     packages = {}
-    cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo = ?', (repo,))
+    cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo = ?', (repo.name,))
     for pkg in deb822.Packages.iter_paragraphs(pkgs):
         name = pkg['Package']
         arch = pkg['Architecture']
         ver = pkg['Version']
-        pkgtuple = (name, ver, arch, repo)
+        pkgtuple = (name, ver, arch, repo.name)
         pkginfo = (
-            name, ver, arch, repo, pkg.get('Maintainer'),
+            name, ver, arch, repo.name, pkg.get('Maintainer'),
             int(pkg['Installed-Size']) if 'Installed-Size' in pkg else None, 
             pkg['Filename'], int(pkg['Size']), pkg.get('SHA256')
         )
@@ -161,14 +193,14 @@ def package_update(cur, repo, path, size, sha256):
         oldrels = frozenset(row[0] for row in cur.execute(
             'SELECT relationship FROM dpkg_package_dependencies'
             ' WHERE package = ? AND version = ? AND architecture = ? AND repo = ?',
-            (name, ver, arch, repo)
+            (name, ver, arch, repo.name)
         ))
         newrels = set()
         for rel in _relationship_fields:
             if rel in pkg:
                 cur.execute(
                     'REPLACE INTO dpkg_package_dependencies VALUES (?,?,?,?,?,?)',
-                    (name, ver, arch, repo, rel, pkg[rel])
+                    (name, ver, arch, repo.name, rel, pkg[rel])
                 )
                 newrels.add(rel)
         for rel in oldrels.difference(newrels):
@@ -176,11 +208,11 @@ def package_update(cur, repo, path, size, sha256):
                 'DELETE FROM dpkg_package_dependencies'
                 ' WHERE package = ? AND version = ? AND architecture = ?'
                 ' AND repo = ? AND relationship = ?',
-                (name, ver, arch, repo, rel)
+                (name, ver, arch, repo.name, rel)
             )
     packages_old = set(cur.execute(
         'SELECT package, version, architecture, repo FROM dpkg_packages'
-        ' WHERE repo = ?', (repo,)
+        ' WHERE repo = ?', (repo.name,)
     ))
     for pkg in packages_old.difference(packages.keys()):
         cur.execute('DELETE FROM dpkg_packages WHERE package = ? AND version = ?'
@@ -189,13 +221,15 @@ def package_update(cur, repo, path, size, sha256):
                     ' AND version = ? AND architecture = ? AND repo = ?', pkg)
 
 def update(cur):
-    for repo, path in REPOS:
+    for repo in REPOS:
         logging.info(repo)
-        size, sha256 = release_update(cur, repo, path)
-        package_update(cur, repo, path, size, sha256)
+        size, sha256 = release_update(cur, repo)
+        if sha256:
+            package_update(cur, repo, size, sha256)
 
 def main(dbfile):
     db = sqlite3.connect(dbfile)
+    db.create_collation("vercomp", version_compare)
     cur = db.cursor()
     init_db(cur)
     update(cur)

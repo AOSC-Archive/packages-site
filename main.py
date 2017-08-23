@@ -9,11 +9,12 @@ import operator
 import itertools
 import functools
 import collections
-from debian_support import version_compare as _version_compare
 
 import jinja2
 import bottle
 import bottle.ext.sqlite
+
+from utils import cmp, version_compare, version_compare_key, strftime, sizeof_fmt
 
 SQL_GET_PACKAGES = '''
 SELECT name, version, spepoch.value epoch, release, description FROM packages
@@ -258,11 +259,6 @@ application = app = bottle.Bottle()
 plugin = bottle.ext.sqlite.Plugin(dbfile='data/abbs.db')
 app.install(plugin)
 
-cmp = lambda a, b: ((a > b) - (a < b))
-version_compare = functools.lru_cache(maxsize=1024)(
-    lambda a, b: _version_compare(a, b) or cmp(a, b)
-)
-version_compare_key = functools.cmp_to_key(version_compare)
 
 def response_lm(f_body=None, status=None, headers=None, modified=None, etag=None):
     ''' Makes an HTTPResponse according to supplied modified time or ETag.
@@ -290,18 +286,6 @@ def response_lm(f_body=None, status=None, headers=None, modified=None, etag=None
     body = '' if bottle.request.method == 'HEAD' else f_body()
 
     return bottle.HTTPResponse(body, status, **headers)
-
-
-def sizeof_fmt(num, suffix='B'):
-    for unit in ['','Ki','Mi','Gi','Ti','Pi','Ei','Zi']:
-        if abs(num) < 1024:
-            return "%3.1f%s%s" % (num, unit, suffix)
-        num /= 1024.0
-    return "%.1f%s%s" % (num, 'Yi', suffix)
-
-
-def strftime(t=None, fmt='%Y-%m-%d %H:%M:%S'):
-    return time.strftime(fmt, time.gmtime(t))
 
 
 jinja2_settings = {
