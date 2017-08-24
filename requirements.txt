@@ -2,3 +2,6 @@ requests
 jinja2
 bottle
 bottle-sqlite
+# from deb822
+six
+chardet

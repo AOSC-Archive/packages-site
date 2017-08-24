@@ -1,7 +1,9 @@
 #!/bin/bash
 REPOS="aosc-os-core aosc-os-abbs aosc-os-arm-bsps"
-ABBS_META="../../abbs-meta/abbsmeta.py"
-cd data/
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+ABBS_META="$DIR/../abbs-meta/abbsmeta.py"
+DATA_DIR="data/"
+cd "$DATA_DIR"
 for repo in $REPOS; do
     if [ ! -d $repo.git ]; then
         git clone --mirror https://github.com/AOSC-Dev/$repo.git
@@ -17,4 +19,4 @@ python3 $ABBS_META -p . -m . -d abbs.db -b staging,master,bugfix -B staging \
     -c base -u 'https://github.com/AOSC-Dev/aosc-os-abbs' -P 1 aosc-os-abbs
 python3 $ABBS_META -p . -m . -d abbs.db -b master -B master \
     -c bsp -u 'https://github.com/AOSC-Dev/aosc-os-arm-bsps' -P 2 aosc-os-arm-bsps
-python3 ../dpkgrepo.py abbs.db
+python3 "$DIR/dpkgrepo.py" abbs.db
