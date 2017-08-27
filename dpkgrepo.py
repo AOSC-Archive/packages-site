@@ -137,6 +137,14 @@ def init_db(cur):
                 'missingcnt INTEGER,'
                 'FOREIGN KEY(repo) REFERENCES dpkg_repos(name)'
                 ')')
+    cur.execute("DROP VIEW IF EXISTS v_dpkg_packages_new")
+    cur.execute("CREATE VIEW IF NOT EXISTS v_dpkg_packages_new AS "
+                "SELECT dp.package package, "
+                "  max(version COLLATE vercomp) dpkg_version, "
+                "  dp.repo repo, dr.realname reponame "
+                "FROM dpkg_packages dp "
+                "LEFT JOIN dpkg_repos dr ON dr.name=dp.repo "
+                "GROUP BY package, repo")
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_repos'
                 ' ON dpkg_repos (realname)')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_packages'
@@ -247,15 +255,16 @@ FROM (SELECT
    ELSE 0 END) ghost
 FROM dpkg_repos
 LEFT JOIN (
-    SELECT DISTINCT package, repo
-    FROM dpkg_packages
+    SELECT DISTINCT dp.package package, dp.repo repo, dr.realname reponame
+    FROM dpkg_packages dp
+    LEFT JOIN dpkg_repos dr ON dr.name=dp.repo
   ) dpkg
   ON dpkg.repo = dpkg_repos.name
 LEFT JOIN packages
   ON packages.name = dpkg.package
 LEFT JOIN package_spec spabhost
   ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
-WHERE ((spabhost.value IS 'noarch') = (dpkg.repo IS 'noarch'))
+WHERE ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch'))
 GROUP BY dpkg_repos.name
 ) c1
 LEFT JOIN (
@@ -287,7 +296,7 @@ LEFT JOIN (
   ) dpkg
   ON dpkg.package = packages.name
 WHERE pkgver.branch = trees.mainbranch
-  AND ((spabhost.value IS 'noarch') = ifnull(dpkg.repo LIKE 'noarch%', 0))
+  AND ((spabhost.value IS 'noarch') = (dpkg.repo IS 'noarch'))
   AND dpkg.repo IS NOT null
   AND (dpkg.version IS NOT null OR (dpkg.category='bsp') = (trees.category='bsp'))
 GROUP BY dpkg.repo

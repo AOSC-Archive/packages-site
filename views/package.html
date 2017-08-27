@@ -22,6 +22,9 @@
 {%- endfor %}
 {%- endif %}
 <h2>Available versions</h2>
+{% if pkg['full_version'] is none -%}
+<p class="pkg-deprecated">(Deprecated)</p>
+{% endif -%}
 <div class="table-wrapper">
 <table class="packages">
 <thead>

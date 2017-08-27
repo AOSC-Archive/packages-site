@@ -12,30 +12,17 @@ import collections
 
 import jinja2
 import bottle
-import bottle.ext.sqlite
 
+import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, sizeof_fmt
 
-SQL_GET_PACKAGES = '''
-SELECT name, version, spepoch.value epoch, release, description FROM packages
-LEFT JOIN package_spec spepoch
-  ON spepoch.package = packages.name AND spepoch.key = 'PKGEPOCH'
-'''
+SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
 SQL_GET_PACKAGE_INFO = '''
 SELECT
   name, tree, category, section, pkg_section, directory,
-  spec.epoch epoch, version, release,
-  description, commit_time, dep.dependency dependency
-FROM packages
-LEFT JOIN (
-    SELECT
-      package,
-      value epoch
-    FROM package_spec
-    WHERE key = 'PKGEPOCH'
-  ) spec
-ON spec.package = packages.name
+  description, full_version, commit_time, dep.dependency dependency
+FROM v_packages
 LEFT JOIN (
     SELECT
       package,
@@ -43,7 +30,7 @@ LEFT JOIN (
     FROM package_dependencies
     GROUP BY package
   ) dep
-  ON dep.package = packages.name
+  ON dep.package = v_packages.name
 WHERE name = ?
 ORDER BY category, section, name
 '''
@@ -51,8 +38,8 @@ ORDER BY category, section, name
 SQL_GET_PACKAGE_INFO_GHOST = '''
 SELECT DISTINCT
   package name, '' tree, '' category, '' section, '' pkg_section,
-  '' directory, '' epoch, '' version, '' release,
-  '' description, NULL commit_time, '' dependency
+  '' directory, '' version, '' description, NULL commit_time,
+  '' dependency, '' full_version
 FROM dpkg_packages WHERE package = ?
 '''
 
@@ -64,125 +51,103 @@ ORDER BY version ASC, architecture ASC
 
 SQL_GET_PACKAGE_REPO = '''
 SELECT
-  packages.name name, packages.version version, spepoch.value epoch,
-  packages.release release, dpkg.versions dpkg_versions,
-  packages.description description
-FROM packages
-LEFT JOIN package_spec spepoch
-  ON spepoch.package = packages.name AND spepoch.key = 'PKGEPOCH'
+  p.name name, p.full_version full_version, dpkg.dpkg_version dpkg_version,
+  p.description description
+FROM v_packages p
 LEFT JOIN package_spec spabhost
-  ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
-LEFT JOIN (
-    SELECT
-      package,
-      repo,
-      group_concat(version) versions
-    FROM dpkg_packages
-    WHERE repo = ?
-    GROUP BY package
-  ) dpkg
-  ON dpkg.package = packages.name
+  ON spabhost.package = p.name AND spabhost.key = 'ABHOST'
+LEFT JOIN v_dpkg_packages_new dpkg
+  ON dpkg.package = p.name
 WHERE dpkg.repo = ?
-  AND ((spabhost.value IS 'noarch') = (dpkg.repo IS 'noarch'))
-ORDER BY packages.name
+  AND ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch'))
+ORDER BY p.name
 '''
 
 SQL_GET_PACKAGE_NEW = '''
-SELECT
-  name, packages.version version, spec.epoch epoch, release, description
-FROM packages
-LEFT JOIN (
-    SELECT
-      package,
-      value epoch
-    FROM package_spec
-    WHERE key = 'PKGEPOCH'
-  ) spec
-  ON spec.package = packages.name
-ORDER BY packages.commit_time DESC
-LIMIT 10
+SELECT name, description, full_version, commit_time FROM v_packages
+ORDER BY commit_time DESC LIMIT 10
 '''
 
 SQL_GET_PACKAGE_LAGGING = '''
 SELECT
-  name, packages.version version, spepoch.value epoch, release,
-  dpkg.versions dpkg_versions, description
-FROM packages
-LEFT JOIN package_spec spepoch
-  ON spepoch.package = packages.name AND spepoch.key = 'PKGEPOCH'
+  v_packages.name name, dpkg.dpkg_version dpkg_version, description, full_version
+FROM v_packages
 LEFT JOIN package_spec spabhost
-  ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
-LEFT JOIN (
-    SELECT
-      package,
-      repo,
-      group_concat(version) versions
-    FROM dpkg_packages
-	WHERE repo = ?
-    GROUP BY package
-  ) dpkg
-  ON dpkg.package = packages.name
-WHERE (dpkg.repo IS 'noarch' OR ? != 'noarch') AND
-  ((spabhost.value IS 'noarch') = (dpkg.repo IS 'noarch'))
+  ON spabhost.package = v_packages.name AND spabhost.key = 'ABHOST'
+LEFT JOIN v_dpkg_packages_new dpkg
+  ON dpkg.package = v_packages.name
+WHERE dpkg.reponame = ? AND
+  dpkg_version IS NOT null AND
+  (dpkg.reponame IS 'noarch' OR ? != 'noarch') AND
+  ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch')) AND
+  (dpkg_version < full_version COLLATE vercomp)
 ORDER BY name
 '''
 
 SQL_GET_PACKAGE_GHOST = '''
-SELECT package name, group_concat(version) dpkg_versions
-FROM dpkg_packages
+SELECT package name, dpkg_version
+FROM v_dpkg_packages_new
 WHERE repo = ? AND name NOT IN (SELECT name FROM packages)
 GROUP BY name
 '''
 
+SQL_GET_PACKAGE_MISSING = '''
+SELECT
+  v_packages.name name, description, full_version
+FROM v_packages
+LEFT JOIN package_spec spabhost
+  ON spabhost.package = v_packages.name AND spabhost.key = 'ABHOST'
+LEFT JOIN v_dpkg_packages_new dpkg
+  ON dpkg.package = v_packages.name
+WHERE dpkg.repo = ? AND
+  dpkg_version IS null AND
+  (dpkg.reponame IS 'noarch' OR ? != 'noarch') AND
+  ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch'))
+ORDER BY name
+'''
+
 SQL_GET_PACKAGE_TREE = '''
 SELECT
-  name, packages.version version, spec.epoch epoch, release,
-  dpkg.versions dpkg_versions, dpkg.repos dpkg_availrepos, description
-FROM packages
-LEFT JOIN (
-    SELECT
-      package,
-      value epoch
-    FROM package_spec
-    WHERE key = 'PKGEPOCH'
-  ) spec
-  ON spec.package = packages.name
-LEFT JOIN (
-    SELECT
-      package,
-      group_concat(version) versions,
-	  group_concat(DISTINCT repo) repos
-    FROM dpkg_packages
-    GROUP BY package
-  ) dpkg
-  ON dpkg.package = packages.name
+  name, dpkg.dpkg_version dpkg_version,
+  group_concat(DISTINCT dpkg.reponame) dpkg_availrepos,
+  description, full_version,
+  ifnull(CASE WHEN dpkg_version IS NOT null
+   THEN (dpkg_version > full_version COLLATE vercomp) -
+   (dpkg_version < full_version COLLATE vercomp)
+   ELSE -1 END, -2) ver_compare
+FROM v_packages
+LEFT JOIN v_dpkg_packages_new dpkg ON dpkg.package = v_packages.name
 WHERE tree = ?
+GROUP BY name
 ORDER BY name
 '''
 
 SQL_GET_REPO_COUNT = '''
 SELECT
-  dpkg_repos.name name, path, date, count(packages.name) pkgcount,
-  sum(CASE WHEN packages.name IS NULL THEN 1 END) ghost
-FROM dpkg_repos
+  drs.repo name, dr.realname realname, dr.path path,
+  dr.date date, dr.testing testing,
+  drs.packagecnt pkgcount, drs.ghostcnt ghost,
+  drs.laggingcnt lagging, drs.missingcnt missing
+FROM dpkg_repo_stats drs
+LEFT JOIN dpkg_repos dr ON dr.name=drs.repo
 LEFT JOIN (
-    SELECT DISTINCT
-      package,
-      repo
-    FROM dpkg_packages
-  ) dpkg
-  ON dpkg.repo = dpkg_repos.name
-LEFT JOIN packages
-  ON packages.name = dpkg.package
-LEFT JOIN package_spec spabhost
-  ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
-WHERE ((spabhost.value IS 'noarch') = (dpkg.repo IS 'noarch'))
-GROUP BY dpkg_repos.name ORDER BY pkgcount + ifnull(ghost, 0) DESC
+  SELECT drs2.repo repo, drs2.packagecnt packagecnt
+  FROM dpkg_repo_stats drs2
+  LEFT JOIN dpkg_repos dr2 ON dr2.name=drs2.repo
+  WHERE dr2.testing=0
+) drs_m ON drs_m.repo=dr.realname
+ORDER BY drs_m.packagecnt DESC, dr.testing ASC
 '''
 
 SQL_GET_TREES = '''
-SELECT tree name, max(commit_time) date, count(name) pkgcount
-FROM packages GROUP BY tree ORDER BY pkgcount DESC
+SELECT
+  p.tree name, t.category, t.url, max(pv.commit_time) date,
+  count(DISTINCT p.name) pkgcount
+FROM packages p
+INNER JOIN package_versions pv ON pv.package=p.name
+LEFT JOIN trees t ON t.name=p.tree
+GROUP BY p.tree
+ORDER BY pkgcount DESC
 '''
 
 SQL_GET_DEB_LIST_HASARCH = '''
@@ -248,6 +213,7 @@ DEP_REL = collections.OrderedDict((
     ('PKGBREAK', 'Breaks')
 ))
 VER_REL = {
+    -2: 'deprecated',
     -1: 'old',
     0: 'same',
     1: 'new'
@@ -256,7 +222,10 @@ VER_REL = {
 RE_QUOTES = re.compile(r'"([a-z]+|\$)"')
 
 application = app = bottle.Bottle()
-plugin = bottle.ext.sqlite.Plugin(dbfile='data/abbs.db')
+plugin = bottle_sqlite.Plugin(
+    dbfile='data/abbs.db',
+    collations={'vercomp': version_compare}
+)
 app.install(plugin)
 
 
@@ -336,7 +305,7 @@ def db_last_modified(db, ttl=3600):
     if (not db_last_modified.last_updated or
         now - db_last_modified.last_updated > ttl):
         row = db.execute(
-            'SELECT commit_time FROM packages ORDER BY commit_time DESC LIMIT 1'
+            'SELECT commit_time FROM package_versions ORDER BY commit_time DESC LIMIT 1'
             ).fetchone()
         if row:
             db_last_modified.last_updated = now
@@ -346,7 +315,7 @@ db_last_modified.last_updated = 0
 db_last_modified.value = 0
 
 
-def db_repos(db, ttl=3600):
+def db_repos(db, ttl=1800):
     now = time.monotonic()
     if (not db_last_modified.last_updated or
         now - db_repos.last_updated > ttl):
@@ -359,7 +328,7 @@ db_repos.last_updated = 0
 db_repos.value = {}
 
 
-def db_trees(db, ttl=3600):
+def db_trees(db, ttl=1800):
     now = time.monotonic()
     if now - db_trees.last_updated > ttl:
         d = collections.OrderedDict((row['name'], dict(row))
@@ -431,9 +400,6 @@ def package(name, db):
                 error='Package "%s" not found.' % name), 404)
     pkg = dict(res)
     dep_dict = {}
-    if pkgintree:
-        fullver = makefullver(pkg['epoch'], pkg['version'], pkg['release'])
-        pkg['full_version'] = fullver
     if pkg['dependency']:
         for dep in pkg['dependency'].split(','):
             dep_pkg, dep_ver, dep_rel = dep.split('|')
@@ -452,7 +418,8 @@ def package(name, db):
             repo_list.add(d['repo'])
             table_row[d['repo']] = d
         dpkg_dict[ver] = table_row
-    if pkgintree and fullver not in dpkg_dict:
+    fullver = pkg['full_version']
+    if pkgintree and fullver and fullver not in dpkg_dict:
         dpkg_dict[fullver] = {}
     pkg['repo'] = repo_list = sorted(repo_list)
     pkg['dpkg_matrix'] = [
@@ -463,29 +430,22 @@ def package(name, db):
     return render(
         'package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
 
-@app.route('/lagging/<repo>')
+@app.route('/lagging/<repo:path>')
 def lagging(repo, db):
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
-    for row in db.execute(SQL_GET_PACKAGE_LAGGING, (repo, repo)):
-        d = dict(row)
-        dpkg_versions = (d.pop('dpkg_versions') or '').split(',')
-        latest = max(dpkg_versions, key=version_compare_key)
-        fullver = makefullver(d['epoch'], d['version'], d['release'])
-        if not latest or version_compare(latest, fullver) < 0:
-            d['dpkg_version'] = latest
-            d['full_version'] = fullver
-            packages.append(d)
+    for row in db.execute(SQL_GET_PACKAGE_LAGGING, (repo, repos[repo]['realname'])):
+        packages.append(dict(row))
     if packages:
         return render('lagging.html', repo=repo, packages=packages)
     else:
         return render('error.html',
             error="There's no lagging packages.")
 
-@app.route('/ghost/<repo>')
+@app.route('/ghost/<repo:path>')
 def ghost(repo, db):
     repos = db_repos(db)
     if repo not in repos:
@@ -493,16 +453,26 @@ def ghost(repo, db):
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
     for row in db.execute(SQL_GET_PACKAGE_GHOST, (repo,)):
-        d = dict(row)
-        dpkg_versions = (d.pop('dpkg_versions') or '').split(',')
-        latest = max(dpkg_versions, key=version_compare_key)
-        d['dpkg_version'] = latest
-        packages.append(d)
+        packages.append(dict(row))
     if packages:
         return render('ghost.html', repo=repo, packages=packages)
     else:
         return render('error.html',
             error="There's no ghost packages.")
+
+@app.route('/missing/<repo:path>')
+def missing(repo, db):
+    repos = db_repos(db)
+    if repo not in repos:
+        return bottle.HTTPResponse(render('error.html',
+                error='Repo "%s" not found.' % repo), 404)
+    packages = []
+    for row in db.execute(SQL_GET_PACKAGE_MISSING, (repo, repos[repo]['realname'])):
+        packages.append(dict(row))
+    if packages:
+        return render('missing.html', repo=repo, packages=packages)
+    else:
+        return render('error.html', error="There's no missing packages.")
 
 @app.route('/tree/<tree>')
 def tree(tree, db):
@@ -513,35 +483,24 @@ def tree(tree, db):
     packages = []
     for row in db.execute(SQL_GET_PACKAGE_TREE, (tree,)):
         d = dict(row)
-        dpkg_versions = (d.pop('dpkg_versions') or '').split(',')
-        latest = max(dpkg_versions, key=version_compare_key)
-        d['dpkg_version'] = latest
-        d['dpkg_repos'] = ', '.join((d.pop('dpkg_availrepos') or '').split(','))
-        fullver = makefullver(d['epoch'], d['version'], d['release'])
-        d['full_version'] = fullver
-        d['ver_compare'] = VER_REL[
-            version_compare(latest, fullver) if latest else -1]
+        d['dpkg_repos'] = ', '.join(sorted((d.pop('dpkg_availrepos') or '').split(',')))
+        d['ver_compare'] = VER_REL[d['ver_compare']]
         packages.append(d)
     if packages:
         return render('tree.html', tree=tree, packages=packages)
     else:
-        return render('error.html',
-            error="There's no ghost packages.")
+        return render('error.html', error="There's no ghost packages.")
 
-@app.route('/repo/<repo>')
+@app.route('/repo/<repo:path>')
 def repo(repo, db):
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
-    for row in db.execute(SQL_GET_PACKAGE_REPO, (repo, repo)):
+    for row in db.execute(SQL_GET_PACKAGE_REPO, (repo,)):
         d = dict(row)
-        dpkg_versions = (d.pop('dpkg_versions') or '').split(',')
-        latest = max(dpkg_versions, key=version_compare_key)
-        fullver = makefullver(d['epoch'], d['version'], d['release'])
-        d['dpkg_version'] = latest
-        d['full_version'] = fullver
+        latest, fullver = d['dpkg_version'], d['full_version']
         d['ver_compare'] = VER_REL[
             version_compare(latest, fullver) if latest else -1]
         packages.append(d)
@@ -551,7 +510,7 @@ _debcompare_key = functools.cmp_to_key(lambda a, b:
     (version_compare(a['version'], b['version'])
      or cmp(a['filename'], b['filename'])))
 
-@app.route('/cleanmirror/<repo>')
+@app.route('/cleanmirror/<repo:path>')
 def cleanmirror(repo, db):
     try:
         retain = int(bottle.request.query.get('retain', 0))
@@ -615,8 +574,6 @@ def index(db):
     total = sum(r['pkgcount'] for r in source_trees)
     for row in db.execute(SQL_GET_PACKAGE_NEW):
         d = dict(row)
-        fullver = makefullver(d['epoch'], d['version'], d['release'])
-        d['full_version'] = fullver
         updates.append(d)
     return render('index.html',
            total=total, repos=repos, source_trees=source_trees,
