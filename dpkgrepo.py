@@ -40,7 +40,7 @@ REPOS = (
     ('arm64', 'os-arm64/os3-dpkg'),
     ('arm64-sunxi', 'os-arm64/sunxi/os3-dpkg'),
     ('armel', 'os-armel/os3-dpkg'),
-    ('rpi2', 'os-armel/rpi2/os3-dpkg'),
+    # ('rpi2', 'os-armel/rpi2/os3-dpkg'),
     # ('standard-bsp', 'os-armel/standard-bsp/os3-dpkg'),
     ('armel-sunxi', 'os-armel/sunxi/os3-dpkg'),
     ('mips64el', 'os-mips64el/os3-dpkg'),
