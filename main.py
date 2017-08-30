@@ -68,6 +68,22 @@ SELECT name, description, full_version, commit_time FROM v_packages
 ORDER BY commit_time DESC LIMIT 10
 '''
 
+SQL_GET_PACKAGE_NEW_LIST = '''
+SELECT
+  name, dpkg.dpkg_version dpkg_version,
+  description, full_version, commit_time,
+  ifnull(CASE WHEN dpkg_version IS NOT null
+   THEN (dpkg_version > full_version COLLATE vercomp) -
+   (dpkg_version < full_version COLLATE vercomp)
+   ELSE -1 END, -2) ver_compare
+FROM v_packages
+LEFT JOIN v_dpkg_packages_new dpkg ON dpkg.package = v_packages.name
+WHERE full_version IS NOT null
+GROUP BY name
+ORDER BY commit_time DESC
+LIMIT ?
+'''
+
 SQL_GET_PACKAGE_LAGGING = '''
 SELECT
   v_packages.name name, dpkg.dpkg_version dpkg_version, description, full_version
@@ -491,6 +507,18 @@ def tree(tree, db):
         packages.append(d)
     if packages:
         return render('tree.html', tree=tree, packages=packages)
+    else:
+        return render('error.html', error="There's no ghost packages.")
+
+@app.route('/updates')
+def updates(db):
+    packages = []
+    for row in db.execute(SQL_GET_PACKAGE_NEW_LIST, (100,)):
+        d = dict(row)
+        d['ver_compare'] = VER_REL[d['ver_compare']]
+        packages.append(d)
+    if packages:
+        return render('updates.html', packages=packages)
     else:
         return render('error.html', error="There's no ghost packages.")
 
