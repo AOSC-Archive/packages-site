@@ -273,7 +273,7 @@ SELECT
   sum(pkgver.fullver > dpkg.version COLLATE vercomp) lagging,
   sum(CASE WHEN dpkg.version IS NULL THEN 1 ELSE 0 END) missing
 FROM packages
-INNER JOIN(
+INNER JOIN (
     SELECT
       package, branch,
       ((CASE WHEN ifnull(epoch, '') = '' THEN '' ELSE epoch || ':' END) ||
@@ -288,7 +288,7 @@ LEFT JOIN package_spec spabhost
 LEFT JOIN (
     SELECT
       dp_d.package package, dr.realname repo, max(dp.version COLLATE vercomp) version, dr.category category
-    FROM (SELECT DISTINCT package FROM dpkg_packages) dp_d
+    FROM (SELECT DISTINCT name package FROM packages) dp_d
     LEFT JOIN (SELECT DISTINCT name FROM dpkg_repos) dr_d
     LEFT JOIN dpkg_packages dp ON dp.package=dp_d.package AND dp.repo=dr_d.name
     LEFT JOIN dpkg_repos dr ON dr.name=dr_d.name
@@ -322,6 +322,7 @@ def main(dbfile):
     cur = db.cursor()
     init_db(cur)
     update(cur)
+    cur.execute('PRAGMA optimize')
     db.commit()
 
 if __name__ == '__main__':

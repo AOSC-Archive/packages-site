@@ -79,8 +79,9 @@ LEFT JOIN v_dpkg_packages_new dpkg
 WHERE dpkg.reponame = ? AND
   dpkg_version IS NOT null AND
   (dpkg.reponame IS 'noarch' OR ? != 'noarch') AND
-  ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch')) AND
-  (dpkg_version < full_version COLLATE vercomp)
+  ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch'))
+GROUP BY name
+HAVING (max(dpkg_version COLLATE vercomp) < full_version COLLATE vercomp)
 ORDER BY name
 '''
 
@@ -93,16 +94,16 @@ GROUP BY name
 
 SQL_GET_PACKAGE_MISSING = '''
 SELECT
-  v_packages.name name, description, full_version
+  v_packages.name name, description, full_version, dpkg_version, v_packages.tree_category
 FROM v_packages
 LEFT JOIN package_spec spabhost
   ON spabhost.package = v_packages.name AND spabhost.key = 'ABHOST'
 LEFT JOIN v_dpkg_packages_new dpkg
-  ON dpkg.package = v_packages.name
-WHERE dpkg.repo = ? AND
-  dpkg_version IS null AND
-  (dpkg.reponame IS 'noarch' OR ? != 'noarch') AND
-  ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch'))
+  ON dpkg.package = v_packages.name AND dpkg.reponame = ?
+WHERE full_version IS NOT null AND dpkg_version IS null
+  AND ((spabhost.value IS 'noarch') = (? IS 'noarch'))
+  AND (EXISTS(SELECT 1 FROM dpkg_repos WHERE realname=? AND category='bsp') =
+       (v_packages.tree_category='bsp'))
 ORDER BY name
 '''
 
@@ -437,7 +438,8 @@ def lagging(repo, db):
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
-    for row in db.execute(SQL_GET_PACKAGE_LAGGING, (repo, repos[repo]['realname'])):
+    reponame = repos[repo]['realname']
+    for row in db.execute(SQL_GET_PACKAGE_LAGGING, (reponame, reponame)):
         packages.append(dict(row))
     if packages:
         return render('lagging.html', repo=repo, packages=packages)
@@ -467,7 +469,8 @@ def missing(repo, db):
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
-    for row in db.execute(SQL_GET_PACKAGE_MISSING, (repo, repos[repo]['realname'])):
+    reponame = repos[repo]['realname']
+    for row in db.execute(SQL_GET_PACKAGE_MISSING, (reponame, reponame, reponame)):
         packages.append(dict(row))
     if packages:
         return render('missing.html', repo=repo, packages=packages)
