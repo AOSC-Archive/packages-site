@@ -248,7 +248,7 @@ tr {
   padding: 0.2em;
   margin: 0.2em 0;
 }
-.repo-testing {
+.repo-testing, .dpkg-testing {
   background-color: aliceblue;
 }
 .repo-name-testing::before {

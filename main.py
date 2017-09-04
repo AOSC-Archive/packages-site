@@ -16,11 +16,13 @@ import bottle
 import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, sizeof_fmt
 
+__version__ = '1.1'
+
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
 SQL_GET_PACKAGE_INFO = '''
 SELECT
-  name, tree, category, section, pkg_section, directory,
+  name, tree, tree_category, branch, category, section, pkg_section, directory,
   description, full_version, commit_time, dep.dependency dependency
 FROM v_packages
 LEFT JOIN (
@@ -44,9 +46,13 @@ FROM dpkg_packages WHERE package = ?
 '''
 
 SQL_GET_PACKAGE_DPKG = '''
-SELECT version, architecture, repo, filename, size
-FROM dpkg_packages WHERE package = ?
-ORDER BY version ASC, architecture ASC
+SELECT
+  version, architecture, repo, dr.realname reponame,
+  dr.testing testing, filename, size
+FROM dpkg_packages dp
+LEFT JOIN dpkg_repos dr ON dr.name=dp.repo
+WHERE package = ?
+ORDER BY dr.realname ASC, version COLLATE vercomp DESC
 '''
 
 SQL_GET_PACKAGE_REPO = '''
@@ -142,7 +148,7 @@ ORDER BY name
 SQL_GET_REPO_COUNT = '''
 SELECT
   drs.repo name, dr.realname realname, dr.path path,
-  dr.date date, dr.testing testing,
+  dr.date date, dr.testing testing, dr.category category,
   drs.packagecnt pkgcount, drs.ghostcnt ghost,
   drs.laggingcnt lagging, drs.missingcnt missing
 FROM dpkg_repo_stats drs
@@ -425,27 +431,31 @@ def package(name, db):
             else:
                 dep_dict[dep_rel] = [(dep_pkg, dep_ver)]
     pkg['dependency'] = dep_dict
+    fullver = pkg['full_version']
+    repos = db_repos(db)
+    reponames = sorted(set(r['realname'] for r in repos.values()
+                           if r['category'] == pkg['tree_category']))
     dpkg_dict = {}
-    repo_list = set()
-    for ver, group in itertools.groupby(db.execute(
-        SQL_GET_PACKAGE_DPKG, (name,)), key=operator.itemgetter('version')):
-        table_row = {}
+    ver_list = []
+    if pkgintree and fullver:
+        ver_list.append(fullver)
+    for repo, group in itertools.groupby(db.execute(
+        SQL_GET_PACKAGE_DPKG, (name,)), key=operator.itemgetter('reponame')):
+        table_row = collections.OrderedDict()
+        if pkgintree and fullver:
+            table_row[fullver] = None
         for row in group:
             d = dict(row)
-            repo_list.add(d['repo'])
-            table_row[d['repo']] = d
-        dpkg_dict[ver] = table_row
-    fullver = pkg['full_version']
-    if pkgintree and fullver and fullver not in dpkg_dict:
-        dpkg_dict[fullver] = {}
-    pkg['repo'] = repo_list = sorted(repo_list)
+            ver = d['version']
+            table_row[ver] = d
+            if ver not in ver_list:
+                ver_list.append(ver)
+        dpkg_dict[repo] = table_row
+    pkg['versions'] = ver_list
     pkg['dpkg_matrix'] = [
-        (ver, [dpkg_dict[ver].get(reponame) for reponame in repo_list])
-        for ver in sorted(dpkg_dict.keys(),
-        key=version_compare_key, reverse=True)]
-    repos = db_repos(db)
-    return render(
-        'package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
+        (repo, [dpkg_dict[repo].get(ver) for ver in ver_list]
+         if repo in dpkg_dict else [None]*len(ver_list)) for repo in reponames]
+    return render('package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
 
 @app.route('/lagging/<repo:path>')
 def lagging(repo, db):
@@ -596,6 +606,10 @@ def cleanmirror(repo, db):
                 debs.append(deb)
     bottle.response.content_type = 'text/plain; charset=UTF8'
     return render('cleanmirror.txt', repo=repo, packages=debs)
+
+@app.route('/api_version')
+def api_version(db):
+    return {"version": __version__}
 
 @app.route('/')
 def index(db):
