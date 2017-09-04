@@ -39,7 +39,8 @@ ORDER BY category, section, name
 
 SQL_GET_PACKAGE_INFO_GHOST = '''
 SELECT DISTINCT
-  package name, '' tree, '' category, '' section, '' pkg_section,
+  package name, '' tree, '' tree_category, '' branch,
+  '' category, '' section, '' pkg_section,
   '' directory, '' version, '' description, NULL commit_time,
   '' dependency, '' full_version
 FROM dpkg_packages WHERE package = ?
@@ -433,8 +434,6 @@ def package(name, db):
     pkg['dependency'] = dep_dict
     fullver = pkg['full_version']
     repos = db_repos(db)
-    reponames = sorted(set(r['realname'] for r in repos.values()
-                           if r['category'] == pkg['tree_category']))
     dpkg_dict = {}
     ver_list = []
     if pkgintree and fullver:
@@ -451,6 +450,10 @@ def package(name, db):
             if ver not in ver_list:
                 ver_list.append(ver)
         dpkg_dict[repo] = table_row
+    if pkg['tree_category']:
+        reponames = sorted(set(r['realname'] for r in repos.values()))
+    else:
+        reponames = sorted(dpkg_dict.keys())
     pkg['versions'] = ver_list
     pkg['dpkg_matrix'] = [
         (repo, [dpkg_dict[repo].get(ver) for ver in ver_list]
