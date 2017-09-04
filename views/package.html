@@ -11,7 +11,7 @@
 {% if pkg['tree'] -%}
 <p><b class="pkg-field">Source</b>: <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/tree/{{ pkg['branch'] }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/{{ pkg['directory'] }}"><span class="pkg-section">{{ pkg['tree'] }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/</span>{{ pkg['directory'] }}</a></p>
 {%- else -%}
-<p><b class="pkg-field">Source</b>: (removed)</p>
+<p><b class="pkg-field">Source</b>: (missing)</p>
 {%- endif %}
 {% if pkg['dependency'] -%}
 {% for rel in dep_rel -%}
