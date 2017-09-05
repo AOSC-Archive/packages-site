@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Search "{{ q }}" - AOSC Packages{% endblock %}
 {% block banner %}<h1>Search "{{ q }}"</h1>
-<p>Found <span class="num">{{ packages|length }} packages.</span></p>{% endblock %}
+<p>Found <span class="num">{{ page.count }} packages.</span></p>{% endblock %}
 {% block main %}
 <table class="packages">
 <tbody>
@@ -10,10 +10,11 @@
     <td class="pkg-name">
       <a href="/packages/{{ pkg['name'] }}">{{ pkg['name'] }}</a>
     </td>
-    <td class="pkg-version">{{ pkg['full_version'] or pkg['version'] }}</td>
+    <td class="pkg-version">{{ pkg['full_version'] or '' }}</td>
     <td class="pkg-description">{{ pkg['description'] }}</td>
   </tr>
 {%- endfor %}
 </tbody>
 </table>
+{% include 'pagination.inc.html' %}
 {% endblock main %}

@@ -1,0 +1,46 @@
+{% macro args(p) -%}?{{ 'q=%s&'|format(q) if q else '' }}page={{ p }}{%- endmacro %}
+{% macro page_buttons(start, stop, current) -%}
+  {% for number in range(start, stop+1) -%}
+    {% if current == number -%}
+      <span class="page-btn">{{ number }}</span>
+    {%- else -%}
+      <a class="page-btn" href="{{ args(number) }}">{{ number }}</a>
+    {%- endif %}
+  {%- endfor %}
+{%- endmacro %}
+{% macro page_button_ellipsis() -%}
+  <span class="page-ellip">&hellip;</span>
+{%- endmacro %}
+{#
+1 2 3 4 5 6 ... 11 12
+1 2 ... 5 6 7 ... 11 12
+1 2 ... 6 7 8 ... 11 12
+1 2 ... 7 8 9 10 11 12
+#}
+{% if page.max > 1 -%}
+<div class="pagination">
+  {% if page.cur > 1 -%}
+    <a class="page-btn" href="{{ args(page.cur - 1) }}">&laquo;</a>
+  {%- endif %}{% if page.max > 9 -%}
+    {% if page.cur < 6 -%}
+      {{ page_buttons(1, 6, page.cur) }}
+      {{ page_button_ellipsis() }}
+      {{ page_buttons(page.max - 1, page.max, page.cur) }}
+    {%- elif page.cur > page.max - 4 -%}
+      {{ page_buttons(1, 2, page.cur) }}
+      {{ page_button_ellipsis() }}
+      {{ page_buttons(page.max - 4, page.max, page.cur) }}
+    {%- else -%}
+      {{ page_buttons(1, 2, page.cur) }}
+      {{ page_button_ellipsis() }}
+      {{ page_buttons(page.cur - 1, page.cur + 1, page.cur) }}
+      {{ page_button_ellipsis() }}
+      {{ page_buttons(page.max - 1, page.max, page.cur) }}
+    {%- endif %}
+  {%- else -%}
+    {{ page_buttons(1, page.max, page.cur) }}
+  {%- endif %}{% if page.cur < page.max -%}
+    <a class="page-btn" href="{{ args(page.cur + 1) }}">&raquo;</a>
+  {%- endif %}
+</div>
+{%- endif %}

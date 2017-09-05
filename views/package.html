@@ -9,7 +9,9 @@
 {% block main %}
 <div class="package" id="{{ pkg['name'] }}">
 {% if pkg['tree'] -%}
-<p><b class="pkg-field">Source</b>: <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/tree/{{ 'staging' if pkg['tree'] == 'aosc-os-abbs' else 'master' }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/{{ pkg['directory'] }}/spec"><span class="pkg-section">{{ pkg['tree'] }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/</span>{{ pkg['directory'] }}</a></p>
+<p><b class="pkg-field">Source</b>: <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/tree/{{ pkg['branch'] }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/{{ pkg['directory'] }}"><span class="pkg-section">{{ pkg['tree'] }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/</span>{{ pkg['directory'] }}</a></p>
+{%- else -%}
+<p><b class="pkg-field">Source</b>: (missing)</p>
 {%- endif %}
 {% if pkg['dependency'] -%}
 {% for rel in dep_rel -%}
@@ -22,22 +24,28 @@
 {%- endfor %}
 {%- endif %}
 <h2>Available versions</h2>
+{% if pkg['full_version'] is none -%}
+<p class="pkg-deprecated">(Deprecated)</p>
+{% endif -%}
 <div class="table-wrapper">
 <table class="packages">
 <thead>
   <tr>
     <th>Version</th>
-    {% for repo in pkg['repo'] -%}
-    <th>{{ repo }}</th>
+    {% for version in pkg['versions'] -%}
+    <th class="dpkg-ver">{{ version }}</th>
     {%- endfor %}
   </tr>
 </thead>
 <tbody>
 {% for row in pkg['dpkg_matrix'] -%}
   <tr>
-    <td class="dpkg-ver">{{ row[0] }}</td>
+    <td>{{ row[0] }}</td>
     {% for col in row[1] -%}
-      {% if col -%}<td class="dpkg">
+      {% if col -%}
+      {% if col['testing'] -%}
+      <td class="dpkg dpkg-testing" title="testing">
+      {%- else -%}<td class="dpkg">{%- endif %}
         <a href="https://repo.aosc.io/{{ repos[col['repo']]['path'] }}/{{ col['filename'] }}">
           {{ col['size']|sizeof_fmt }}
         </a>
