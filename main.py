@@ -468,7 +468,8 @@ def package(name, db):
                 ver_list.append(ver)
         dpkg_dict[repo] = table_row
     if pkg['tree_category']:
-        reponames = sorted(set(r['realname'] for r in repos.values()))
+        reponames = sorted(set(r['realname'] for r in repos.values()
+                           if r['category'] == pkg['tree_category']))
     else:
         reponames = sorted(dpkg_dict.keys())
     pkg['versions'] = ver_list
