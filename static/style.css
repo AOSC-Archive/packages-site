@@ -265,6 +265,27 @@ span[title] {
 .w45 {
   width: 45%;
 }
+.pagination {
+  margin-top: 1em;
+  text-align: right;
+}
+.page-btn {
+  font-size: 1.05em;
+  display: inline-block;
+  padding: 0.25em 0.5em;
+  margin: 0.2em 0.25em;
+  background-color: #eee;
+  border-radius: 2px;
+}
+.page-ellip {
+  margin: 0 0.2em;
+}
+a.page-btn {
+  background-color: #e3f2fd;
+}
+a.page-btn:hover, a.page-btn:focus, a.page-btn:visited {
+  text-decoration: none;
+}
 .page-footer {
   text-align: center;
   margin-top: 2em;

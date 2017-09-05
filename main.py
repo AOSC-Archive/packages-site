@@ -14,9 +14,9 @@ import jinja2
 import bottle
 
 import bottle_sqlite
-from utils import cmp, version_compare, version_compare_key, strftime, sizeof_fmt
+from utils import cmp, version_compare, version_compare_key, strftime, sizeof_fmt, Pager
 
-__version__ = '1.1'
+__version__ = '1.2'
 
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
@@ -242,6 +242,7 @@ VER_REL = {
     0: 'same',
     1: 'new'
 }
+PAGESIZE = 60
 
 RE_QUOTES = re.compile(r'"([a-z]+|\$)"')
 
@@ -308,6 +309,20 @@ def gen_trie(wordlist):
             p = p[c]
         p['$'] = 0
     return trie
+
+
+def get_page():
+    page_q = bottle.request.query.get('page')
+    if not page_q:
+        return 1
+    try:
+        return int(page_q)
+    except ValueError:
+        return 1
+
+
+def pagination(pager):
+    return {'cur': pager.page, 'max': pager.pagecount(), 'count': pager.count()}
 
 
 def render_html(**kwargs):
@@ -390,6 +405,7 @@ def search(db):
     q = bottle.request.query.get('q')
     packages = []
     packages_set = set()
+    page = get_page()
     if q:
         for row in db.execute(
             SQL_GET_PACKAGES + " WHERE name LIKE ? ORDER BY name",
@@ -407,7 +423,8 @@ def search(db):
             if row['name'] not in packages_set:
                 packages.append(dict(row))
     if packages:
-        return render('search.html', q=q, packages=packages)
+        res = Pager(packages, PAGESIZE, page)
+        return render('search.html', q=q, packages=list(res), page=pagination(res))
     else:
         return render('error.html',
             error='No packages matching "%s" found.' % q)
@@ -462,64 +479,76 @@ def package(name, db):
 
 @app.route('/lagging/<repo:path>')
 def lagging(repo, db):
+    page = get_page()
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
     reponame = repos[repo]['realname']
-    for row in db.execute(SQL_GET_PACKAGE_LAGGING, (reponame, reponame)):
+    res = Pager(db.execute(
+                SQL_GET_PACKAGE_LAGGING, (reponame, reponame)), PAGESIZE, page)
+    for row in res:
         packages.append(dict(row))
     if packages:
-        return render('lagging.html', repo=repo, packages=packages)
+        return render('lagging.html',
+            repo=repo, packages=packages, page=pagination(res))
     else:
         return render('error.html',
             error="There's no lagging packages.")
 
 @app.route('/ghost/<repo:path>')
 def ghost(repo, db):
+    page = get_page()
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
-    for row in db.execute(SQL_GET_PACKAGE_GHOST, (repo,)):
+    res = Pager(db.execute(SQL_GET_PACKAGE_GHOST, (repo,)), PAGESIZE, page)
+    for row in res:
         packages.append(dict(row))
     if packages:
-        return render('ghost.html', repo=repo, packages=packages)
+        return render('ghost.html', repo=repo, packages=packages, page=pagination(res))
     else:
         return render('error.html',
             error="There's no ghost packages.")
 
 @app.route('/missing/<repo:path>')
 def missing(repo, db):
+    page = get_page()
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
     reponame = repos[repo]['realname']
-    for row in db.execute(SQL_GET_PACKAGE_MISSING, (reponame, reponame, reponame)):
+    res = Pager(db.execute(SQL_GET_PACKAGE_MISSING,
+                (reponame, reponame, reponame)), PAGESIZE, page)
+    for row in res:
         packages.append(dict(row))
     if packages:
-        return render('missing.html', repo=repo, packages=packages)
+        return render('missing.html',
+            repo=repo, packages=packages, page=pagination(res))
     else:
         return render('error.html', error="There's no missing packages.")
 
 @app.route('/tree/<tree>')
 def tree(tree, db):
+    page = get_page()
     trees = db_trees(db)
     if tree not in trees:
         return bottle.HTTPResponse(render('error.html',
                 error='Source tree "%s" not found.' % tree), 404)
     packages = []
-    for row in db.execute(SQL_GET_PACKAGE_TREE, (tree,)):
+    res = Pager(db.execute(SQL_GET_PACKAGE_TREE, (tree,)), PAGESIZE, page)
+    for row in res:
         d = dict(row)
         d['dpkg_repos'] = ', '.join(sorted((d.pop('dpkg_availrepos') or '').split(',')))
         d['ver_compare'] = VER_REL[d['ver_compare']]
         packages.append(d)
     if packages:
-        return render('tree.html', tree=tree, packages=packages)
+        return render('tree.html', tree=tree, packages=packages, page=pagination(res))
     else:
         return render('error.html', error="There's no ghost packages.")
 
@@ -537,18 +566,20 @@ def updates(db):
 
 @app.route('/repo/<repo:path>')
 def repo(repo, db):
+    page = get_page()
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
-    for row in db.execute(SQL_GET_PACKAGE_REPO, (repo,)):
+    res = Pager(db.execute(SQL_GET_PACKAGE_REPO, (repo,)), PAGESIZE, page)
+    for row in res:
         d = dict(row)
         latest, fullver = d['dpkg_version'], d['full_version']
         d['ver_compare'] = VER_REL[
             version_compare(latest, fullver) if latest else -1]
         packages.append(d)
-    return render('repo.html', repo=repo, packages=packages)
+    return render('repo.html', repo=repo, packages=packages, page=pagination(res))
 
 _debcompare_key = functools.cmp_to_key(lambda a, b:
     (version_compare(a['version'], b['version'])

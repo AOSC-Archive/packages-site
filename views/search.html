@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Search "{{ q }}" - AOSC Packages{% endblock %}
 {% block banner %}<h1>Search "{{ q }}"</h1>
-<p>Found <span class="num">{{ packages|length }} packages.</span></p>{% endblock %}
+<p>Found <span class="num">{{ page.count }} packages.</span></p>{% endblock %}
 {% block main %}
 <table class="packages">
 <tbody>
@@ -16,4 +16,5 @@
 {%- endfor %}
 </tbody>
 </table>
+{% include 'pagination.inc.html' %}
 {% endblock main %}

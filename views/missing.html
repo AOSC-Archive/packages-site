@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Missing packages in "{{ repo }}" - AOSC Packages{% endblock %}
 {% block banner %}<h1>Unavailable packages in "{{ repo }}"</h1>
-<p>Found <span class="num">{{ packages|length }} packages.</span></p>
+<p>Found <span class="num">{{ page.count }} packages.</span></p>
 {% endblock %}
 {% block main %}
 <table class="packages">
@@ -22,4 +22,5 @@
 {%- endfor %}
 </tbody>
 </table>
+{% include 'pagination.inc.html' %}
 {% endblock main %}

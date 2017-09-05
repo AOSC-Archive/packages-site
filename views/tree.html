@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}"{{ tree }}" source tree - AOSC Packages{% endblock %}
 {% block banner %}<h1>"{{ tree }}" source tree</h1>
-<p><span class="num">{{ packages|length }} packages.</span></p>
+<p><span class="num">{{ page.count }} packages.</span></p>
 {% endblock %}
 {% block main %}
 <table class="packages">
@@ -28,4 +28,5 @@
 </tbody>
 </table>
 {% include 'legend.inc.html' %}
+{% include 'pagination.inc.html' %}
 {% endblock main %}
