@@ -17,7 +17,7 @@ import bottle
 import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, sizeof_fmt, Pager
 
-__version__ = '1.2'
+__version__ = '1.3'
 
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
