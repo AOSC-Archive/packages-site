@@ -286,6 +286,16 @@ a.page-btn {
 a.page-btn:hover, a.page-btn:focus, a.page-btn:visited {
   text-decoration: none;
 }
+.error {
+  background-color: rgba(255, 0, 0, .12);
+  padding: .5em;
+}
+.tips {
+  border: 1px solid #ddd;
+  background-color: aliceblue;
+  padding: .5em;
+  margin-top: 1em;
+}
 .page-footer {
   text-align: center;
   margin-top: 2em;

@@ -22,6 +22,9 @@
 {% endfor %}
 </p>{%- endif %}
 {%- endfor %}
+<p><b class="pkg-field">Other links</b>:
+<a href="/changelog/{{ pkg['name']|urlencode }}">Changelog</a>,
+<a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/issues/new?title={{ pkg['name']|urlencode }}%3A%20">Report issues</a></p>
 {%- endif %}
 <h2>Available versions</h2>
 {% if pkg['full_version'] is none -%}

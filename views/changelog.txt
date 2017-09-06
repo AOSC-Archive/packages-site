@@ -1,0 +1,8 @@
+{% for ch in changes -%}
+{{ name }} ({{ ch.fullver }}) testing; urgency=medium
+
+  {{ ch.message|fill(78, subsequent_indent='  ') }}
+
+ -- {{ ch.fullname }} <{{ ch.email }}>  {{ ch.time|strftime('%a, %d %b %Y %H:%M:%S +0000') }}
+
+{% endfor %}

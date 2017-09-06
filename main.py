@@ -6,6 +6,7 @@ import re
 import time
 import json
 import operator
+import textwrap
 import itertools
 import functools
 import collections
@@ -44,6 +45,21 @@ SELECT DISTINCT
   '' directory, '' version, '' description, NULL commit_time,
   '' dependency, '' full_version
 FROM dpkg_packages WHERE package = ?
+'''
+
+SQL_GET_PACKAGE_CHANGELOG = '''
+SELECT
+  ((CASE WHEN ifnull(epoch, '') = '' THEN '' ELSE epoch || ':' END) ||
+   version || (CASE WHEN ifnull(release, '') = '' THEN '' ELSE '-' ||
+   release END)) fullver, pr.rid rid, m.githash githash,
+  round((ev.mtime-2440587.5)*86400) time,
+  ev.user email, cm.name fullname, pr.message message
+FROM marks.package_rel pr
+LEFT JOIN marks.marks m ON m.rid=pr.rid
+LEFT JOIN fossil.event ev ON ev.objid=pr.rid
+LEFT JOIN marks.committers cm ON cm.email=ev.user
+WHERE package = ?
+ORDER BY mtime DESC, rid DESC
 '''
 
 SQL_GET_PACKAGE_DPKG = '''
@@ -285,7 +301,8 @@ def response_lm(f_body=None, status=None, headers=None, modified=None, etag=None
 jinja2_settings = {
     'filters': {
         'strftime': strftime,
-        'sizeof_fmt': sizeof_fmt
+        'sizeof_fmt': sizeof_fmt,
+        'fill': textwrap.fill
     },
     'autoescape': jinja2.select_autoescape(('html', 'htm', 'xml'))
 }
@@ -422,12 +439,8 @@ def search(db):
             ('%%%s%%' % q,)):
             if row['name'] not in packages_set:
                 packages.append(dict(row))
-    if packages:
-        res = Pager(packages, PAGESIZE, page)
-        return render('search.html', q=q, packages=list(res), page=pagination(res))
-    else:
-        return render('error.html',
-            error='No packages matching "%s" found.' % q)
+    res = Pager(packages, PAGESIZE, page)
+    return render('search.html', q=q, packages=list(res), page=pagination(res))
 
 @app.route('/packages/<name>')
 def package(name, db):
@@ -477,6 +490,22 @@ def package(name, db):
         (repo, [dpkg_dict[repo].get(ver) for ver in ver_list]
          if repo in dpkg_dict else [None]*len(ver_list)) for repo in reponames]
     return render('package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
+
+@app.route('/changelog/<name>')
+def changelog(name, db):
+    res = db.execute(SQL_GET_PACKAGE_INFO, (name,)).fetchone()
+    if res is None:
+        return bottle.HTTPResponse(render('error.txt',
+                error='Package "%s" not found.' % name), 404,
+                content_type='text/plain; charset=UTF8')
+    pkg = dict(res)
+    db.execute('ATTACH ? AS marks', ('data/%s-marks.db' % pkg['tree'],))
+    db.execute('ATTACH ? AS fossil', ('data/%s.fossil' % pkg['tree'],))
+    changelog = []
+    for row in db.execute(SQL_GET_PACKAGE_CHANGELOG, (name,)):
+        changelog.append(dict(row))
+    bottle.response.content_type = 'text/plain; charset=UTF8'
+    return render('changelog.txt', name=name, changes=changelog)
 
 @app.route('/lagging/<repo:path>')
 def lagging(repo, db):
@@ -598,8 +627,9 @@ def cleanmirror(repo, db):
 
     repos = db_repos(db)
     if repo not in repos:
-        return bottle.HTTPResponse(render('error.html',
-                error='Repo "%s" not found.' % repo), 404)
+        return bottle.HTTPResponse(render('error.txt',
+                error='Repo "%s" not found.' % repo), 404,
+                content_type='text/plain; charset=UTF8')
     debs = []
     for package, group in itertools.groupby(
             db.execute(SQL_GET_DEB_LIST_HASARCH
