@@ -15,7 +15,8 @@ import jinja2
 import bottle
 
 import bottle_sqlite
-from utils import cmp, version_compare, version_compare_key, strftime, sizeof_fmt, Pager
+from utils import cmp, version_compare, version_compare_key, strftime, \
+                  sizeof_fmt, parse_fail_arch, Pager
 
 __version__ = '1.3'
 
@@ -24,7 +25,8 @@ SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 SQL_GET_PACKAGE_INFO = '''
 SELECT
   name, tree, tree_category, branch, category, section, pkg_section, directory,
-  description, full_version, commit_time, dep.dependency dependency
+  description, full_version, commit_time, dep.dependency dependency,
+  (spabhost.value IS 'noarch') noarch, spfailarch.value fail_arch
 FROM v_packages
 LEFT JOIN (
     SELECT
@@ -34,6 +36,10 @@ LEFT JOIN (
     GROUP BY package
   ) dep
   ON dep.package = v_packages.name
+LEFT JOIN package_spec spabhost
+  ON spabhost.package = v_packages.name AND spabhost.key = 'ABHOST'
+LEFT JOIN package_spec spfailarch
+  ON spfailarch.package = v_packages.name AND spfailarch.key = 'FAIL_ARCH'
 WHERE name = ?
 ORDER BY category, section, name
 '''
@@ -41,9 +47,9 @@ ORDER BY category, section, name
 SQL_GET_PACKAGE_INFO_GHOST = '''
 SELECT DISTINCT
   package name, '' tree, '' tree_category, '' branch,
-  '' category, '' section, '' pkg_section,
-  '' directory, '' version, '' description, NULL commit_time,
-  '' dependency, '' full_version
+  '' category, '' section, '' pkg_section, '' directory,
+  '' description, '' full_version, NULL commit_time,
+  '' dependency, 0 noarch, NULL fail_arch
 FROM dpkg_packages WHERE package = ?
 '''
 
@@ -480,9 +486,17 @@ def package(name, db):
             if ver not in ver_list:
                 ver_list.append(ver)
         dpkg_dict[repo] = table_row
-    if pkg['tree_category']:
-        reponames = sorted(set(r['realname'] for r in repos.values()
-                           if r['category'] == pkg['tree_category']))
+    fail_arch = parse_fail_arch(pkg['fail_arch'])
+    if pkg['noarch']:
+        reponames = ['noarch']
+    elif pkg['tree_category']:
+        reponames = sorted(set(
+            r['realname'] for r in repos.values()
+            if (r['category'] == pkg['tree_category'] and
+                r['realname'] != 'noarch' and (not fail_arch.op or
+                (fail_arch.op == '@' and r['realname'] not in fail_arch.plist) or
+                (fail_arch.op == '!' and r['realname'] in fail_arch.plist)))
+        ))
     else:
         reponames = sorted(dpkg_dict.keys())
     pkg['versions'] = ver_list
@@ -497,14 +511,14 @@ def changelog(name, db):
     if res is None:
         return bottle.HTTPResponse(render('error.txt',
                 error='Package "%s" not found.' % name), 404,
-                content_type='text/plain; charset=UTF8')
+                content_type='text/plain; charset=UTF-8')
     pkg = dict(res)
     db.execute('ATTACH ? AS marks', ('data/%s-marks.db' % pkg['tree'],))
     db.execute('ATTACH ? AS fossil', ('data/%s.fossil' % pkg['tree'],))
     changelog = []
     for row in db.execute(SQL_GET_PACKAGE_CHANGELOG, (name,)):
         changelog.append(dict(row))
-    bottle.response.content_type = 'text/plain; charset=UTF8'
+    bottle.response.content_type = 'text/plain; charset=UTF-8'
     return render('changelog.txt', name=name, changes=changelog)
 
 @app.route('/lagging/<repo:path>')
@@ -629,7 +643,7 @@ def cleanmirror(repo, db):
     if repo not in repos:
         return bottle.HTTPResponse(render('error.txt',
                 error='Repo "%s" not found.' % repo), 404,
-                content_type='text/plain; charset=UTF8')
+                content_type='text/plain; charset=UTF-8')
     debs = []
     for package, group in itertools.groupby(
             db.execute(SQL_GET_DEB_LIST_HASARCH
@@ -669,8 +683,15 @@ def cleanmirror(repo, db):
                     debs.append(deb)
             elif getall or removereason:
                 debs.append(deb)
-    bottle.response.content_type = 'text/plain; charset=UTF8'
+    bottle.response.content_type = 'text/plain; charset=UTF-8'
     return render('cleanmirror.txt', repo=repo, packages=debs)
+
+@app.route('/data/<filename>')
+def data_dl(db, filename):
+    if not (filename.endswith('.db') or filename.endswith('.fossil')):
+        bottle.abort(404, "Not found: '/data/%s'" % filename)
+    mime = 'application/x-sqlite3; charset=binary'
+    return bottle.static_file(filename, root='data', mimetype=mime, download=filename)
 
 @app.route('/api_version')
 def api_version(db):

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import re
 import time
 import functools
 import collections
@@ -21,6 +22,18 @@ def sizeof_fmt(num, suffix='B'):
 
 def strftime(t=None, fmt='%Y-%m-%d %H:%M:%S'):
     return time.strftime(fmt, time.gmtime(t))
+
+re_test = re.compile(r'^([@!])\((.+)\)$')
+TestList = collections.namedtuple('TestList', 'op plist')
+
+def parse_fail_arch(s):
+    if not s:
+        return TestList(None, ())
+    match = re_test.match(s)
+    if match:
+        return TestList(match.group(1), match.group(2).split('|'))
+    else:
+        return TestList('@', [s])
 
 class Pager(collections.abc.Iterable):
     def __init__(self, iterable, pagesize, page=1):
