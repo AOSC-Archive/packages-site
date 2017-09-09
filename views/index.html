@@ -36,6 +36,12 @@
     </th>
     <th>Last Update (UTC)</th>
   </tr>
+{% for category, repos in repo_categories -%}
+{% if category and repos -%}
+  <tr class="repo-row">
+    <th class="repo-category" colspan="3">{{ category }}</th>
+  </tr>
+{%- endif %}
 {% for repo in repos -%}
   <tr class="repo-row{{ ' repo-testing' if repo['testing'] else '' }}">
     <td class="repo-name{{ ' repo-name-testing' if repo['testing'] else '' }}">
@@ -61,6 +67,7 @@
       <time datetime="{{ repo['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ repo['date']|strftime('%Y-%m-%d %H:%M') }}</time>
     </td>
   </tr>
+{%- endfor %}
 {%- endfor %}
   <tr>
     <th><span title="Links to Git repo">Source Tree</span></th>

@@ -252,6 +252,9 @@ tr {
   padding: 0.2em;
   margin: 0.2em 0;
 }
+.repo-category {
+  padding-left: 1.8em;
+}
 .repo-testing, .dpkg-testing {
   background-color: aliceblue;
 }

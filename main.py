@@ -18,7 +18,7 @@ import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, \
                   sizeof_fmt, parse_fail_arch, Pager
 
-__version__ = '1.3'
+__version__ = '1.4'
 
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
@@ -264,6 +264,7 @@ VER_REL = {
     0: 'same',
     1: 'new'
 }
+REPO_CAT = (('base', None), ('bsp', 'BSP'), ('overlay', 'Overlay'))
 PAGESIZE = 60
 
 RE_QUOTES = re.compile(r'"([a-z]+|\$)"')
@@ -700,16 +701,17 @@ def api_version(db):
 
 @app.route('/')
 def index(db):
-    repos = list(db_repos(db).values())
     source_trees = list(db_trees(db).values())
+    repo_categories = [(c[1], [r for r in db_repos(db).values()
+                       if r['category'] == c[0]]) for c in REPO_CAT]
     updates = []
     total = sum(r['pkgcount'] for r in source_trees)
     for row in db.execute(SQL_GET_PACKAGE_NEW):
         d = dict(row)
         updates.append(d)
     return render('index.html',
-           total=total, repos=repos, source_trees=source_trees,
-           updates=updates)
+           total=total, repo_categories=repo_categories,
+           source_trees=source_trees, updates=updates)
 
 
 if __name__ == '__main__':
