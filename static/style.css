@@ -131,6 +131,10 @@ tr {
   font-weight: normal;
   color: #577db5;
 }
+.autocomplete-noredir {
+  font-style: italic;
+  text-indent: 0.4em;
+}
 .autocomplete-suggestion.selected {
   background: #f0f0f0;
 }

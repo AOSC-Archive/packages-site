@@ -426,6 +426,7 @@ def pkgtrie(db):
 @app.route('/search/')
 def search(db):
     q = bottle.request.query.get('q')
+    noredir = bottle.request.query.get('noredir')
     packages = []
     packages_set = set()
     page = get_page()
@@ -433,12 +434,12 @@ def search(db):
         for row in db.execute(
             SQL_GET_PACKAGES + " WHERE name LIKE ? ORDER BY name",
             ('%%%s%%' % q,)):
-            if row['name'] == q:
+            if row['name'] == q and not noredir:
                 bottle.redirect("/packages/" + q)
             packages.append(dict(row))
             packages_set.add(row['name'])
         row = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (q,)).fetchone()
-        if row:
+        if row and not noredir:
             bottle.redirect("/packages/" + q)
         for row in db.execute(
             SQL_GET_PACKAGES + " WHERE description LIKE ? ORDER BY name",

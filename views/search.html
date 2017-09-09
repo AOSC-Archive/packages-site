@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Search "{{ q }}" - AOSC Packages{% endblock %}
-{% block banner %}<h1>Search "{{ q }}"</h1>
+{% block title %}Search for "{{ q }}" - AOSC Packages{% endblock %}
+{% block banner %}<h1>Search for "{{ q }}"</h1>
 <p>Found <span class="num">{{ page.count }} packages.</span></p>{% endblock %}
 {% block main %}
 {% if packages -%}
