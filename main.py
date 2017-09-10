@@ -422,7 +422,8 @@ def pkgtrie(db):
         'pkgtrie.js', packagetrie=RE_QUOTES.sub('\\1', json.dumps(gen_trie(
         row[0] for row in db.execute('SELECT name FROM packages')),
         separators=',:')).replace('{$:0}', '0')),
-        modified=db_last_modified(db))
+        modified=db_last_modified(db),
+        headers={'Content-Type': 'application/javascript; charset=UTF-8'})
 
 @app.route('/search/')
 def search(db):
