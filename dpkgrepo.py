@@ -248,8 +248,10 @@ def package_update(cur, repo, size, sha256):
 SQL_COUNT_REPO = '''
 REPLACE INTO dpkg_repo_stats
 SELECT c1.repo repo, pkgcount, ghost, lagging, missing
-FROM (SELECT
-  dpkg_repos.name repo, count(packages.name) pkgcount,
+FROM (
+SELECT
+  dpkg_repos.name repo, dpkg_repos.realname reponame,
+  count(packages.name) pkgcount,
   (CASE WHEN count(packages.name)
    THEN sum(CASE WHEN packages.name IS NULL THEN 1 ELSE 0 END)
    ELSE 0 END) ghost
@@ -302,7 +304,7 @@ WHERE pkgver.branch = trees.mainbranch
 GROUP BY dpkg.repo
 ) c2
 ON c2.repo=c1.repo
-ORDER BY c1.repo
+ORDER BY c1.reponame, c1.repo
 '''
 
 def stats_update(cur):
