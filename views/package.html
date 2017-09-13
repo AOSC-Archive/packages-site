@@ -24,6 +24,9 @@
 {%- endfor %}
 <p><b class="pkg-field">Other links</b>:
 <a href="/changelog/{{ pkg['name']|urlencode }}">Changelog</a>,
+{% if pkg['hasrevdep'] -%}
+<a href="/revdep/{{ pkg['name']|urlencode }}">Reverse dependency</a>,
+{%- endif %}
 <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/issues/new?title={{ pkg['name']|urlencode }}%3A%20">Report issues</a></p>
 {%- endif %}
 <h2>Available versions</h2>

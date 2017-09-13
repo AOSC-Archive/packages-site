@@ -5,10 +5,12 @@ import os
 import re
 import time
 import json
+import pickle
 import operator
 import textwrap
 import itertools
 import functools
+import subprocess
 import collections
 
 import jinja2
@@ -18,7 +20,7 @@ import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, \
                   sizeof_fmt, parse_fail_arch, Pager
 
-__version__ = '1.4'
+__version__ = '1.5'
 
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
@@ -26,7 +28,8 @@ SQL_GET_PACKAGE_INFO = '''
 SELECT
   name, tree, tree_category, branch, category, section, pkg_section, directory,
   description, full_version, commit_time, dep.dependency dependency,
-  (spabhost.value IS 'noarch') noarch, spfailarch.value fail_arch
+  (spabhost.value IS 'noarch') noarch, spfailarch.value fail_arch,
+  (revdep.dependency IS NOT null) hasrevdep
 FROM v_packages
 LEFT JOIN (
     SELECT
@@ -40,8 +43,14 @@ LEFT JOIN package_spec spabhost
   ON spabhost.package = v_packages.name AND spabhost.key = 'ABHOST'
 LEFT JOIN package_spec spfailarch
   ON spfailarch.package = v_packages.name AND spfailarch.key = 'FAIL_ARCH'
+LEFT JOIN (
+    SELECT dependency FROM package_dependencies
+    WHERE relationship == 'PKGDEP' OR relationship == 'BUILDDEP'
+      OR relationship == 'PKGRECOM'
+    GROUP BY dependency
+  ) revdep
+  ON revdep.dependency = v_packages.name
 WHERE name = ?
-ORDER BY category, section, name
 '''
 
 SQL_GET_PACKAGE_INFO_GHOST = '''
@@ -49,7 +58,7 @@ SELECT DISTINCT
   package name, '' tree, '' tree_category, '' branch,
   '' category, '' section, '' pkg_section, '' directory,
   '' description, '' full_version, NULL commit_time,
-  '' dependency, 0 noarch, NULL fail_arch
+  '' dependency, 0 noarch, NULL fail_arch, 0 hasrevdep
 FROM dpkg_packages WHERE package = ?
 '''
 
@@ -250,6 +259,15 @@ WHERE repo = ?
 ORDER BY dp.package
 '''
 
+SQL_GET_PACKAGE_REV_REL = '''
+SELECT package, version, relationship
+FROM package_dependencies
+WHERE
+  dependency = ? AND (relationship == 'PKGDEP' OR
+  relationship == 'BUILDDEP' OR relationship == 'PKGRECOM')
+ORDER BY relationship, package
+'''
+
 DEP_REL = collections.OrderedDict((
     ('PKGDEP', 'Depends'),
     ('BUILDDEP', 'Depends (build)'),
@@ -257,6 +275,11 @@ DEP_REL = collections.OrderedDict((
     ('PKGRECOM', 'Recommends'),
     ('PKGCONFL', 'Conflicts'),
     ('PKGBREAK', 'Breaks')
+))
+DEP_REL_REV = collections.OrderedDict((
+    ('PKGDEP', 'Depended by'),
+    ('BUILDDEP', 'Depended by (build)'),
+    ('PKGRECOM', 'Recommended by')
 ))
 VER_REL = {
     -2: 'deprecated',
@@ -310,6 +333,9 @@ jinja2_settings = {
         'strftime': strftime,
         'sizeof_fmt': sizeof_fmt,
         'fill': textwrap.fill
+    },
+    'tests': {
+        'blob': lambda x: type(x) == bytes
     },
     'autoescape': jinja2.select_autoescape(('html', 'htm', 'xml'))
 }
@@ -451,6 +477,18 @@ def search(db):
     res = Pager(packages, PAGESIZE, page)
     return render('search.html', q=q, packages=list(res), page=pagination(res))
 
+@app.route('/query/', method=('GET', 'POST'))
+def query(db):
+    q = bottle.request.forms.get('q')
+    if not q:
+        return render('query.html', q='', headers=[], rows=[], error=None)
+    proc = subprocess.run(
+        ('python3', 'rawquery.py', 'data/abbs.db'),
+        input=q.encode('utf-8'), stdout=subprocess.PIPE, check=True)
+    result = pickle.loads(proc.stdout)
+    return render('query.html', q=q, headers=result.get('header', ()),
+                  rows=result.get('rows', ()), error=result.get('error'))
+
 @app.route('/packages/<name>')
 def package(name, db):
     res = db.execute(SQL_GET_PACKAGE_INFO, (name,)).fetchone()
@@ -523,6 +561,20 @@ def changelog(name, db):
         changelog.append(dict(row))
     bottle.response.content_type = 'text/plain; charset=UTF-8'
     return render('changelog.txt', name=name, changes=changelog)
+
+@app.route('/revdep/<name>')
+def revdep(name, db):
+    res = db.execute('SELECT 1 FROM packages WHERE name = ?', (name,)).fetchone()
+    if res is None:
+        return bottle.HTTPResponse(render('error.html',
+                error='Package "%s" not found.' % name), 404)
+    revdeps = collections.defaultdict(list)
+    for relationship, group in itertools.groupby(
+        db.execute(SQL_GET_PACKAGE_REV_REL, (name,)),
+        key=operator.itemgetter('relationship')):
+        for row in group:
+            revdeps[relationship].append(dict(row))
+    return render('revdep.html', name=name, revdeps=revdeps, dep_rel_rev=DEP_REL_REV)
 
 @app.route('/lagging/<repo:path>')
 def lagging(repo, db):

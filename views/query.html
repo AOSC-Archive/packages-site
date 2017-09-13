@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Raw query - AOSC Packages{% endblock %}
+{% block extraheader %}<script>
+function AutoGrow(oField) {
+  if (oField.scrollHeight > oField.clientHeight) {
+    oField.style.height = oField.scrollHeight + oField.clientTop * 2 + 2 + "px";
+  }
+}
+document.addEventListener('DOMContentLoaded', function() {
+  AutoGrow(document.getElementById('sqlinput'));
+});</script>{% endblock %}
+{% block banner %}<h1>Raw SQL query</h1>
+<form id="querybox" action="/query/" method="post">
+<input type="submit" value="Submit" class="inputsubmit">
+<p>Only input one SQL query.</p>
+<textarea name="q" id="sqlinput">{{ q }}</textarea>
+</form>
+{% endblock %}
+{% block main %}
+{% if error -%}
+<div class="error">Error: {{ error }}</div>
+{%- elif q -%}<p><span class="num">{{ rows|length }} results.</span></p>
+{%- endif %}
+{% if headers -%}
+<table class="packages">
+<thead>
+  <tr>{% for name in headers -%}<th>{{ name }}</th>{%- endfor %}</tr>
+</thead>
+<tbody>
+{% for row in rows -%}<tr>
+  {% for v in row -%}
+  {% if v is none -%}<td class="sql-special">{{ 'null' }}</td>
+  {%- elif v is blob -%}<td class="sql-special">{{ '[blob]' }}</td>
+  {%- else -%}<td>{{ v }}</td>
+  {%- endif %}{%- endfor %}
+</tr>{%- endfor %}
+</tbody>
+</table>
+{%- endif %}
+{% endblock main %}

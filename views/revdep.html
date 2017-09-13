@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Reverse dependencies of "{{ name }}" - AOSC Packages{% endblock %}
+{% block banner %}<h1>Reverse dependencies of "{{ name }}"</h1>
+<p><a href="/packages/{{ name }}">← Back to package details</a></p>
+{% endblock %}
+{% block main %}
+{% for rel in dep_rel_rev -%}
+{% if rel in revdeps -%}<p>
+<b class="pkg-field pkg-dep-rel">{{ dep_rel_rev[rel] }}</b>:
+{% for dep in revdeps[rel] -%}
+<span class="pkg-dep"><a href="{{ dep['package'] }}">{{ dep['package'] }}</a>{{ dep['version'] }}</span>
+{% endfor %}
+</p>{%- endif %}
+{%- endfor %}
+{#
+<table class="packages">
+<thead>
+  <tr>
+    <th>Reverse Dependency</th>
+    <th>Dependency Version</th>
+    <th>Spec Version</th>
+  </tr>
+</thead>
+<tbody>
+{% for rel in dep_rel_rev -%}
+{% if rel in pkg['dependency'] -%}
+<tr><th colspan="3">{{ dep_rel_rev[rel] }}</th></tr>
+<b class="pkg-field pkg-dep-rel">{{ dep_rel_rev[rel] }}</b>:
+{% for dep in pkg['dependency'][rel] -%}
+<span class="pkg-dep"><a href="{{ dep[0] }}">{{ dep[0] }}</a>{{ dep[1] }}</span>
+{% endfor %}
+{%- endif %}
+{%- endfor %}
+
+{% for pkg in packages -%}
+  <tr>
+    <td class="pkg-name">
+      <a href="/packages/{{ pkg['name'] }}">{{ pkg['name'] }}</a>
+    </td>
+    <td class="pkg-version pkg-version-dpkg dpkg-ver-{{ pkg['ver_compare'] }}">
+      {{ pkg['dpkg_version'] or '' }}</td>
+    <td class="pkg-version">{{ pkg['full_version'] or '' }}</td>
+    <td class="pkg-repos">{{ pkg['dpkg_repos'] }}</td>
+  </tr>
+{%- endfor %}
+</tbody>
+</table>
+#}
+{% endblock main %}
