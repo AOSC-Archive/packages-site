@@ -8,9 +8,14 @@ import collections
 from debian_support import version_compare as _version_compare
 
 cmp = lambda a, b: ((a > b) - (a < b))
-version_compare = functools.lru_cache(maxsize=1024)(
-    lambda a, b: _version_compare(a, b) or cmp(a, b)
-)
+
+@functools.lru_cache(maxsize=1024)
+def version_compare(a, b):
+    try:
+        return _version_compare(a, b) or cmp(a, b)
+    except ValueError:
+        return cmp(a, b)
+
 version_compare_key = functools.cmp_to_key(version_compare)
 
 def sizeof_fmt(num, suffix='B'):
