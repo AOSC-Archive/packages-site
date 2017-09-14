@@ -2,6 +2,7 @@
 REPOS="aosc-os-core aosc-os-abbs aosc-os-arm-bsps"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ABBS_META="$DIR/../abbs-meta/abbsmeta.py"
+ANITYA="$DIR/../abbs-meta/anitya.py"
 DATA_DIR="data/"
 cd "$DATA_DIR"
 for repo in $REPOS; do
@@ -20,3 +21,4 @@ python3 $ABBS_META -p . -m . -d abbs.db -b staging,master,bugfix -B staging \
 python3 $ABBS_META -p . -m . -d abbs.db -b master -B master \
     -c bsp -u 'https://github.com/AOSC-Dev/aosc-os-arm-bsps' -P 2 aosc-os-arm-bsps
 python3 "$DIR/dpkgrepo.py" abbs.db
+python3 $ANITYA -d abbs.db anitya.ini

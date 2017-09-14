@@ -63,5 +63,8 @@
 </tbody>
 </table>
 </div>
+{% if pkg['anitya_comp'] == -1 %}
+<div class="tips">There seems to be a new version: <a href="https://release-monitoring.org/project/{{ pkg['anitya_id'] }}/">{{ pkg['anitya_version'] }}</a></div>
+{% endif %}
 </div>
 {% endblock main %}

@@ -26,10 +26,12 @@ SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
 SQL_GET_PACKAGE_INFO = '''
 SELECT
-  name, tree, tree_category, branch, category, section, pkg_section, directory,
+  v_packages.name name, tree, tree_category, branch,
+  category, section, pkg_section, directory,
   description, version, full_version, commit_time, dep.dependency dependency,
   (spabhost.value IS 'noarch') noarch, spfailarch.value fail_arch,
-  (revdep.dependency IS NOT null) hasrevdep
+  (revdep.dependency IS NOT null) hasrevdep,
+  anitya_projects.id anitya_id, anitya_projects.latest_version anitya_version
 FROM v_packages
 LEFT JOIN (
     SELECT
@@ -50,7 +52,9 @@ LEFT JOIN (
     GROUP BY dependency
   ) revdep
   ON revdep.dependency = v_packages.name
-WHERE name = ?
+LEFT JOIN anitya_link ON anitya_link.package = v_packages.name
+LEFT JOIN anitya_projects ON anitya_projects.id = anitya_link.projectid
+WHERE v_packages.name = ?
 '''
 
 SQL_GET_PACKAGE_INFO_GHOST = '''
@@ -58,7 +62,8 @@ SELECT DISTINCT
   package name, '' tree, '' tree_category, '' branch,
   '' category, '' section, '' pkg_section, '' directory,
   '' description, '' version, '' full_version, NULL commit_time,
-  '' dependency, 0 noarch, NULL fail_arch, 0 hasrevdep
+  '' dependency, 0 noarch, NULL fail_arch, 0 hasrevdep,
+  NULL anitya_id, NULL anitya_version
 FROM dpkg_packages WHERE package = ?
 '''
 
@@ -544,6 +549,11 @@ def package(name, db):
     pkg['dpkg_matrix'] = [
         (repo, [dpkg_dict[repo].get(ver) for ver in ver_list]
          if repo in dpkg_dict else [None]*len(ver_list)) for repo in reponames]
+    print(pkg['version'], pkg['anitya_version'])
+    if pkg['anitya_version']:
+        pkg['anitya_comp'] = version_compare(pkg['version'], pkg['anitya_version'])
+    else:
+        pkg['anitya_comp'] = None
     return render('package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
 
 @app.route('/changelog/<name>')
