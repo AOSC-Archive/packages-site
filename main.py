@@ -369,11 +369,13 @@ def gen_trie(wordlist):
 def get_page():
     page_q = bottle.request.query.get('page')
     if not page_q:
-        return 1
+        return 1, PAGESIZE
+    elif page_q == 'all':
+        return 1, 1000000000
     try:
-        return int(page_q)
+        return int(page_q), PAGESIZE
     except ValueError:
-        return 1
+        return 1, PAGESIZE
 
 
 def pagination(pager):
@@ -462,7 +464,7 @@ def search(db):
     noredir = bottle.request.query.get('noredir')
     packages = []
     packages_set = set()
-    page = get_page()
+    page, pagesize = get_page()
     if q:
         for row in db.execute(
             SQL_GET_PACKAGES + " WHERE name LIKE ? ORDER BY name",
@@ -479,7 +481,7 @@ def search(db):
             ('%%%s%%' % q,)):
             if row['name'] not in packages_set:
                 packages.append(dict(row))
-    res = Pager(packages, PAGESIZE, page)
+    res = Pager(packages, pagesize, page)
     return render('search.html', q=q, packages=list(res), page=pagination(res))
 
 @app.route('/query/', method=('GET', 'POST'))
@@ -588,7 +590,7 @@ def revdep(name, db):
 
 @app.route('/lagging/<repo:path>')
 def lagging(repo, db):
-    page = get_page()
+    page, pagesize = get_page()
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(render('error.html',
@@ -596,7 +598,7 @@ def lagging(repo, db):
     packages = []
     reponame = repos[repo]['realname']
     res = Pager(db.execute(
-                SQL_GET_PACKAGE_LAGGING, (reponame, reponame)), PAGESIZE, page)
+                SQL_GET_PACKAGE_LAGGING, (reponame, reponame)), pagesize, page)
     for row in res:
         packages.append(dict(row))
     if packages:
@@ -608,13 +610,13 @@ def lagging(repo, db):
 
 @app.route('/ghost/<repo:path>')
 def ghost(repo, db):
-    page = get_page()
+    page, pagesize = get_page()
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
-    res = Pager(db.execute(SQL_GET_PACKAGE_GHOST, (repo,)), PAGESIZE, page)
+    res = Pager(db.execute(SQL_GET_PACKAGE_GHOST, (repo,)), pagesize, page)
     for row in res:
         packages.append(dict(row))
     if packages:
@@ -625,7 +627,7 @@ def ghost(repo, db):
 
 @app.route('/missing/<repo:path>')
 def missing(repo, db):
-    page = get_page()
+    page, pagesize = get_page()
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(render('error.html',
@@ -633,7 +635,7 @@ def missing(repo, db):
     packages = []
     reponame = repos[repo]['realname']
     res = Pager(db.execute(SQL_GET_PACKAGE_MISSING,
-                (reponame, reponame, reponame)), PAGESIZE, page)
+                (reponame, reponame, reponame)), pagesize, page)
     for row in res:
         packages.append(dict(row))
     if packages:
@@ -644,13 +646,13 @@ def missing(repo, db):
 
 @app.route('/tree/<tree>')
 def tree(tree, db):
-    page = get_page()
+    page, pagesize = get_page()
     trees = db_trees(db)
     if tree not in trees:
         return bottle.HTTPResponse(render('error.html',
                 error='Source tree "%s" not found.' % tree), 404)
     packages = []
-    res = Pager(db.execute(SQL_GET_PACKAGE_TREE, (tree,)), PAGESIZE, page)
+    res = Pager(db.execute(SQL_GET_PACKAGE_TREE, (tree,)), pagesize, page)
     for row in res:
         d = dict(row)
         d['dpkg_repos'] = ', '.join(sorted((d.pop('dpkg_availrepos') or '').split(',')))
@@ -675,13 +677,13 @@ def updates(db):
 
 @app.route('/repo/<repo:path>')
 def repo(repo, db):
-    page = get_page()
+    page, pagesize = get_page()
     repos = db_repos(db)
     if repo not in repos:
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
-    res = Pager(db.execute(SQL_GET_PACKAGE_REPO, (repo,)), PAGESIZE, page)
+    res = Pager(db.execute(SQL_GET_PACKAGE_REPO, (repo,)), pagesize, page)
     for row in res:
         d = dict(row)
         latest, fullver = d['dpkg_version'], d['full_version']
