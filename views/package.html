@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ pkg['name'] }} - AOSC Packages{% endblock %}
 {% block banner %}<h1>{{ pkg['name'] }}
-<span class="pkg-version">{{ pkg['version'] }}</span>{% if pkg['release'] %}-<span class="pkg-version pkg-release">{{ pkg['release'] }}</span>{% endif %}
+{% if pkg['version'] %}<span class="pkg-version">{{ pkg['version'] }}</span>{% if pkg['release'] %}-<span class="pkg-version pkg-release">{{ pkg['release'] }}</span>{% endif %}{% endif %}
 </h1>
 <p class="pkg-description">{{ pkg['description'] }}</p>
 {% endblock %}
