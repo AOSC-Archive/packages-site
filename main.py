@@ -671,11 +671,18 @@ def tree(tree, db):
 
 @app.route('/list')
 def pkg_list(db):
-    packages = []
-    for row in db.execute(SQL_GET_PACKAGE_LIST):
-        d = dict(row)
-        packages.append(d)
-    return {'packages': packages}
+    modified = db_last_modified(db)
+
+    def _query():
+        packages = []
+        for row in db.execute(SQL_GET_PACKAGE_LIST):
+            d = dict(row)
+            packages.append(d)
+        return json.dumps({'packages': packages, 'last_modified': modified},
+                          sort_keys=True)
+
+    return response_lm(_query, modified=modified,
+        headers={'Content-Type': 'application/json'})
 
 @app.route('/updates')
 def updates(db):
