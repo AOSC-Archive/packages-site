@@ -669,7 +669,7 @@ def tree(tree, db):
     else:
         return render('error.html', error="There's no ghost packages.")
 
-@app.route('/list')
+@app.route('/list.json')
 def pkg_list(db):
     modified = db_last_modified(db)
 
