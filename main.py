@@ -20,7 +20,7 @@ import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, \
                   sizeof_fmt, parse_fail_arch, Pager
 
-__version__ = '1.5'
+__version__ = '1.6'
 
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
