@@ -177,6 +177,22 @@ GROUP BY name
 ORDER BY name
 '''
 
+SQL_GET_PACKAGE_LIST = '''
+SELECT
+  name, tree, tree_category, branch, category, section, pkg_section, directory,
+  description, version, full_version, commit_time,
+  dpkg.dpkg_version dpkg_version,
+  group_concat(DISTINCT dpkg.reponame) dpkg_availrepos,
+  ifnull(CASE WHEN dpkg_version IS NOT null
+   THEN (dpkg_version > full_version COLLATE vercomp) -
+   (dpkg_version < full_version COLLATE vercomp)
+   ELSE -1 END, -2) ver_compare
+FROM v_packages
+LEFT JOIN v_dpkg_packages_new dpkg ON dpkg.package = v_packages.name
+GROUP BY name
+ORDER BY name
+'''
+
 SQL_GET_REPO_COUNT = '''
 SELECT
   drs.repo name, dr.realname realname, dr.path path,
@@ -652,6 +668,14 @@ def tree(tree, db):
         return render('tree.html', tree=tree, packages=packages, page=pagination(res))
     else:
         return render('error.html', error="There's no ghost packages.")
+
+@app.route('/list')
+def pkg_list(db):
+    packages = []
+    for row in db.execute(SQL_GET_PACKAGE_LIST):
+        d = dict(row)
+        packages.append(d)
+    return {'packages': packages}
 
 @app.route('/updates')
 def updates(db):
