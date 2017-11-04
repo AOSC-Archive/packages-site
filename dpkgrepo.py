@@ -162,6 +162,10 @@ def release_update(cur, repo):
             (repo.name, repo.realname, repo.path, repo.source_tree,
             repo.category, repo.testing, None, None, None, None, None,
             None, None, None, None))
+        if repo.testing:
+            cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo = ?', (repo.name,))
+            cur.execute('DELETE FROM dpkg_package_dependencies WHERE repo = ?', (repo.name,))
+            cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo = ?', (repo.name,))
         return 0, None
     else:
         req.raise_for_status()
