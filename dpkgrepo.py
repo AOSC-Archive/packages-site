@@ -192,6 +192,10 @@ def package_update(cur, repo, size, sha256):
     del req
     packages = {}
     cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo = ?', (repo.name,))
+    packages_old = set(cur.execute(
+        'SELECT package, version, architecture, repo FROM dpkg_packages'
+        ' WHERE repo = ?', (repo.name,)
+    ))
     for pkg in deb822.Packages.iter_paragraphs(pkgs):
         name = pkg['Package']
         arch = pkg['Architecture']
@@ -235,10 +239,6 @@ def package_update(cur, repo, size, sha256):
                 ' AND repo = ? AND relationship = ?',
                 (name, ver, arch, repo.name, rel)
             )
-    packages_old = set(cur.execute(
-        'SELECT package, version, architecture, repo FROM dpkg_packages'
-        ' WHERE repo = ?', (repo.name,)
-    ))
     for pkg in packages_old.difference(packages.keys()):
         cur.execute('DELETE FROM dpkg_packages WHERE package = ? AND version = ?'
                     ' AND architecture = ? AND repo = ?', pkg)
