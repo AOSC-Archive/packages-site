@@ -103,7 +103,7 @@ ORDER BY p.name
 
 SQL_GET_PACKAGE_NEW = '''
 SELECT name, description, full_version, commit_time FROM v_packages
-ORDER BY commit_time DESC LIMIT 10
+ORDER BY commit_time DESC, name ASC LIMIT 10
 '''
 
 SQL_GET_PACKAGE_NEW_LIST = '''
@@ -118,7 +118,7 @@ FROM v_packages
 LEFT JOIN v_dpkg_packages_new dpkg ON dpkg.package = v_packages.name
 WHERE full_version IS NOT null
 GROUP BY name
-ORDER BY commit_time DESC
+ORDER BY commit_time DESC, name ASC
 LIMIT ?
 '''
 
