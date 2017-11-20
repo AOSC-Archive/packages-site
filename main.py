@@ -27,7 +27,8 @@ SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 SQL_GET_PACKAGE_INFO = '''
 SELECT
   name, tree, tree_category, branch, category, section, pkg_section, directory,
-  description, version, full_version, commit_time, dep.dependency dependency,
+  description, version, full_version, commit_time, committer,
+  dep.dependency dependency,
   (spabhost.value IS 'noarch') noarch, spfailarch.value fail_arch,
   (revdep.dependency IS NOT null) hasrevdep
 FROM v_packages
@@ -57,7 +58,7 @@ SQL_GET_PACKAGE_INFO_GHOST = '''
 SELECT DISTINCT
   package name, '' tree, '' tree_category, '' branch,
   '' category, '' section, '' pkg_section, '' directory,
-  '' description, '' version, '' full_version, NULL commit_time,
+  '' description, '' version, '' full_version, NULL commit_time, '' committer,
   '' dependency, 0 noarch, NULL fail_arch, 0 hasrevdep
 FROM dpkg_packages WHERE package = ?
 '''
@@ -180,7 +181,7 @@ ORDER BY name
 SQL_GET_PACKAGE_LIST = '''
 SELECT
   name, tree, tree_category, branch, category, section, pkg_section, directory,
-  description, version, full_version, commit_time,
+  description, version, full_version, commit_time, committer,
   dpkg.dpkg_version dpkg_version,
   group_concat(DISTINCT dpkg.reponame) dpkg_availrepos,
   ifnull(CASE WHEN dpkg_version IS NOT null
