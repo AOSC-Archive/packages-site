@@ -5,6 +5,7 @@ import os
 import re
 import time
 import json
+import html
 import pickle
 import operator
 import textwrap
@@ -285,6 +286,30 @@ WHERE
 ORDER BY relationship, package
 '''
 
+SQL_SEARCH_PACKAGES_DESC = '''
+SELECT q.name, q.description, q.desc_highlight, vp.full_version
+FROM (
+  SELECT
+    vp.name, vp.description,
+    highlight(fts_packages, 1, '<b>', '</b>') desc_highlight,
+    (CASE WHEN vp.name=? THEN 1
+     WHEN instr(vp.name, ?)=0 THEN 3 ELSE 2 END) matchcls,
+    bm25(fts_packages, 5, 1) ftrank
+  FROM packages vp
+  INNER JOIN fts_packages fp ON fp.name=vp.name
+  WHERE fts_packages MATCH ?
+  UNION ALL
+  SELECT
+    vp.name, vp.description, vp.description desc_highlight,
+    2 matchcls, 1.0 ftrank
+  FROM v_packages vp
+  LEFT JOIN fts_packages fp ON fp.name=vp.name AND fts_packages MATCH ?
+  WHERE vp.name LIKE ('%' || ? || '%') AND vp.name!=? AND fp.name IS NULL
+) q
+INNER JOIN v_packages vp ON vp.name=q.name
+ORDER BY q.matchcls, q.ftrank, vp.commit_time DESC, q.name
+'''
+
 DEP_REL = collections.OrderedDict((
     ('PKGDEP', 'Depends'),
     ('BUILDDEP', 'Depends (build)'),
@@ -391,6 +416,8 @@ def get_page():
 
 
 def pagination(pager):
+    if pager is None:
+        return {'cur': 1, 'max': 1, 'count': 0}
     return {'cur': pager.page, 'max': pager.pagecount(), 'count': pager.count()}
 
 
@@ -474,25 +501,24 @@ def pkgtrie(db):
 def search(db):
     q = bottle.request.query.get('q')
     noredir = bottle.request.query.get('noredir')
-    packages = []
-    packages_set = set()
     page, pagesize = get_page()
-    if q:
-        for row in db.execute(
-            SQL_GET_PACKAGES + " WHERE name LIKE ? ORDER BY name",
-            ('%%%s%%' % q,)):
-            if row['name'] == q and not noredir:
-                bottle.redirect("/packages/" + q)
-            packages.append(dict(row))
-            packages_set.add(row['name'])
-        row = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (q,)).fetchone()
-        if row and not noredir:
+    if not q:
+        return render('search.html', q=q, packages=[], page=pagination(None))
+    if not noredir:
+        row = db.execute("SELECT 1 FROM packages WHERE name=?", (q,)).fetchone()
+        if not row:
+            row = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (q,)).fetchone()
+        if row:
             bottle.redirect("/packages/" + q)
-        for row in db.execute(
-            SQL_GET_PACKAGES + " WHERE description LIKE ? ORDER BY name",
-            ('%%%s%%' % q,)):
-            if row['name'] not in packages_set:
-                packages.append(dict(row))
+    packages = []
+    qlike = '%%%s%%' % q
+    for row in db.execute(
+        SQL_SEARCH_PACKAGES_DESC, (q,)*6).fetchall():
+        d = dict(row)
+        d['desc_highlight'] = html.escape(d['desc_highlight']).replace(
+            '&lt;b&gt;', '<b>').replace('&lt;/b&gt;', '</b>')
+        d['name_highlight'] = html.escape(d['name']).replace(q, '<b>%s</b>' % q)
+        packages.append(d)
     res = Pager(packages, pagesize, page)
     return render('search.html', q=q, packages=list(res), page=pagination(res))
 
