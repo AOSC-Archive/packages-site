@@ -14,9 +14,9 @@ for repo in $REPOS; do
     fi
 done
 python3 $ABBS_META -p . -m . -d abbs.db -b master -B master \
-    -c bsp -u 'https://github.com/AOSC-Dev/aosc-os-arm-bsps' -P 2 aosc-os-arm-bsps
+    -c base -u 'https://github.com/AOSC-Dev/aosc-os-core' -P 0 aosc-os-core
 python3 $ABBS_META -p . -m . -d abbs.db -b staging,master,bugfix -B staging \
     -c base -u 'https://github.com/AOSC-Dev/aosc-os-abbs' -P 1 aosc-os-abbs
 python3 $ABBS_META -p . -m . -d abbs.db -b master -B master \
-    -c base -u 'https://github.com/AOSC-Dev/aosc-os-core' -P 0 aosc-os-core
+    -c bsp -u 'https://github.com/AOSC-Dev/aosc-os-arm-bsps' -P 2 aosc-os-arm-bsps
 python3 "$DIR/dpkgrepo.py" abbs.db
