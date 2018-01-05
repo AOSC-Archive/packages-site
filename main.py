@@ -7,6 +7,7 @@ import time
 import json
 import html
 import pickle
+import sqlite3
 import operator
 import textwrap
 import itertools
@@ -333,6 +334,7 @@ REPO_CAT = (('base', None), ('bsp', 'BSP'), ('overlay', 'Overlay'))
 PAGESIZE = 60
 
 RE_QUOTES = re.compile(r'"([a-z]+|\$)"')
+RE_FTS5_COLSPEC = re.compile(r'(?<!")(\w*-[\w-]*)(?!")')
 
 application = app = bottle.Bottle()
 plugin = bottle_sqlite.Plugin(
@@ -511,9 +513,13 @@ def search(db):
         if row:
             bottle.redirect("/packages/" + q)
     packages = []
-    qlike = '%%%s%%' % q
-    for row in db.execute(
-        SQL_SEARCH_PACKAGES_DESC, (q,)*6).fetchall():
+    qesc = RE_FTS5_COLSPEC.sub(r'"\1"', q)
+    try:
+        rows = db.execute(SQL_SEARCH_PACKAGES_DESC, (qesc,)*6).fetchall()
+    except sqlite3.OperationalError:
+        # fts5 syntax error
+        rows = []
+    for row in rows:
         d = dict(row)
         d['desc_highlight'] = html.escape(d['desc_highlight']).replace(
             '&lt;b&gt;', '<b>').replace('&lt;/b&gt;', '</b>')
