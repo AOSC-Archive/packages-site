@@ -24,6 +24,9 @@
 {%- endfor %}
 <p><b class="pkg-field">Other links</b>:
 <a href="/changelog/{{ pkg['name']|urlencode }}">Changelog</a>,
+{% if pkg['srctype'] -%}
+<a href="{{ pkg['srcurl'] }}">Upstream source ({{ pkg['srctype'] }})</a>,
+{%- endif %}
 {% if pkg['hasrevdep'] -%}
 <a href="/revdep/{{ pkg['name']|urlencode }}">Reverse dependency</a>,
 {%- endif %}

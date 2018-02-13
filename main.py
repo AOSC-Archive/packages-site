@@ -32,6 +32,7 @@ SELECT
   description, version, full_version, commit_time, committer,
   dep.dependency dependency,
   (spabhost.value IS 'noarch') noarch, spfailarch.value fail_arch,
+  spsrc.key srctype, spsrc.value srcurl,
   (revdep.dependency IS NOT null) hasrevdep
 FROM v_packages
 LEFT JOIN (
@@ -46,6 +47,9 @@ LEFT JOIN package_spec spabhost
   ON spabhost.package = v_packages.name AND spabhost.key = 'ABHOST'
 LEFT JOIN package_spec spfailarch
   ON spfailarch.package = v_packages.name AND spfailarch.key = 'FAIL_ARCH'
+LEFT JOIN package_spec spsrc
+  ON spsrc.package = v_packages.name
+  AND spsrc.key IN ('SRCTBL', 'GITSRC', 'SVNSRC', 'BZRSRC')
 LEFT JOIN (
     SELECT dependency FROM package_dependencies
     WHERE relationship == 'PKGDEP' OR relationship == 'BUILDDEP'
@@ -61,7 +65,8 @@ SELECT DISTINCT
   package name, '' tree, '' tree_category, '' branch,
   '' category, '' section, '' pkg_section, '' directory,
   '' description, '' version, '' full_version, NULL commit_time, '' committer,
-  '' dependency, 0 noarch, NULL fail_arch, 0 hasrevdep
+  '' dependency, 0 noarch, NULL fail_arch, NULL srctype, NULL srcurl,
+  0 hasrevdep
 FROM dpkg_packages WHERE package = ?
 '''
 
@@ -330,6 +335,12 @@ VER_REL = {
     0: 'same',
     1: 'new'
 }
+SRC_TYPE = {
+    'SRCTBL': 'tarball',
+    'GITSRC': 'Git',
+    'SVNSRC': 'Subversion',
+    'BZRSRC': 'Bazaar'
+}
 REPO_CAT = (('base', None), ('bsp', 'BSP'), ('overlay', 'Overlay'))
 PAGESIZE = 60
 
@@ -595,6 +606,8 @@ def package(name, db):
     pkg['dpkg_matrix'] = [
         (repo, [dpkg_dict[repo].get(ver) for ver in ver_list]
          if repo in dpkg_dict else [None]*len(ver_list)) for repo in reponames]
+    if pkg['srctype']:
+        pkg['srctype'] = SRC_TYPE[pkg['srctype']]
     return render('package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
 
 @app.route('/changelog/<name>')
