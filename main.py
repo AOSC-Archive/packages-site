@@ -608,6 +608,8 @@ def package(name, db):
          if repo in dpkg_dict else [None]*len(ver_list)) for repo in reponames]
     if pkg['srctype']:
         pkg['srctype'] = SRC_TYPE[pkg['srctype']]
+        if pkg['srctype'] == 'tarball':
+            pkg['srcurl_base'] = pkg['srcurl'].rsplit('/', 1)[0]
     return render('package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
 
 @app.route('/changelog/<name>')
