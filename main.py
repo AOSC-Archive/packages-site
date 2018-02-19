@@ -346,6 +346,7 @@ PAGESIZE = 60
 
 RE_QUOTES = re.compile(r'"([a-z]+|\$)"')
 RE_FTS5_COLSPEC = re.compile(r'(?<!")(\w*-[\w-]*)(?!")')
+RE_SRCHOST = re.compile(r'^https://(github\.com|bitbucket\.org|gitlab\.com)')
 
 application = app = bottle.Bottle()
 plugin = bottle_sqlite.Plugin(
@@ -608,8 +609,17 @@ def package(name, db):
          if repo in dpkg_dict else [None]*len(ver_list)) for repo in reponames]
     if pkg['srctype']:
         pkg['srctype'] = SRC_TYPE[pkg['srctype']]
-        if pkg['srctype'] == 'tarball':
+        if RE_SRCHOST.match(pkg['srcurl']):
+            pkg['srcurl_base'] = '/'.join(pkg['srcurl'].split('/')[:5])
+        elif pkg['srctype'] == 'tarball':
             pkg['srcurl_base'] = pkg['srcurl'].rsplit('/', 1)[0]
+        elif pkg['srctype'] == 'Git':
+            if pkg['srcurl'].startswith('git://'):
+                pkg['srcurl_base'] = 'http://' + pkg['srcurl'][6:]
+            else:
+                pkg['srcurl_base'] = pkg['srcurl']
+        if pkg['srcurl_base'].endswith('.git'):
+            pkg['srcurl_base'] = pkg['srcurl_base'][:-4]
     return render('package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
 
 @app.route('/changelog/<name>')
