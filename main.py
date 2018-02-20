@@ -576,8 +576,6 @@ def package(name, db):
     repos = db_repos(db)
     dpkg_dict = {}
     ver_list = []
-    if pkgintree and fullver:
-        ver_list.append(fullver)
     for repo, group in itertools.groupby(db.execute(
         SQL_GET_PACKAGE_DPKG, (name,)), key=operator.itemgetter('reponame')):
         table_row = collections.OrderedDict()
@@ -590,6 +588,9 @@ def package(name, db):
             if ver not in ver_list:
                 ver_list.append(ver)
         dpkg_dict[repo] = table_row
+    ver_list.sort(key=version_compare_key, reverse=True)
+    if pkgintree and fullver and fullver not in ver_list:
+        ver_list.insert(0, fullver)
     fail_arch = parse_fail_arch(pkg['fail_arch'])
     if pkg['noarch']:
         reponames = ['noarch']
