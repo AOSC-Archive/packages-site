@@ -347,6 +347,8 @@ PAGESIZE = 60
 RE_QUOTES = re.compile(r'"([a-z]+|\$)"')
 RE_FTS5_COLSPEC = re.compile(r'(?<!")(\w*-[\w-]*)(?!")')
 RE_SRCHOST = re.compile(r'^https://(github\.com|bitbucket\.org|gitlab\.com)')
+RE_PYPI = re.compile(r'^https?://pypi\.(python\.org|io)')
+RE_PYPISRC = re.compile(r'^https?://pypi\.(python\.org|io)/packages/source/')
 
 application = app = bottle.Bottle()
 plugin = bottle_sqlite.Plugin(
@@ -612,6 +614,12 @@ def package(name, db):
         pkg['srctype'] = SRC_TYPE[pkg['srctype']]
         if RE_SRCHOST.match(pkg['srcurl']):
             pkg['srcurl_base'] = '/'.join(pkg['srcurl'].split('/')[:5])
+        elif RE_PYPI.match(pkg['srcurl']):
+            if RE_PYPISRC.match(pkg['srcurl']):
+                pypiname = pkg['srcurl'].split('/')[-2]
+            else:
+                pypiname = pkg['srcurl'].split('/')[-1].rsplit('-', 1)[0]
+            pkg['srcurl_base'] = 'https://pypi.python.org/pypi/%s/' % pypiname
         elif pkg['srctype'] == 'tarball':
             pkg['srcurl_base'] = pkg['srcurl'].rsplit('/', 1)[0]
         elif pkg['srctype'] == 'Git':
