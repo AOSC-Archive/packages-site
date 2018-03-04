@@ -72,7 +72,10 @@ REPOS = (
         'os-powerpc/testing/os-powerpc/os3-dpkg', None, 'base', 1),
     Repo('ppc64', 'ppc64', 'os-ppc64/os3-dpkg', None, 'base', 0),
     Repo('ppc64/testing', 'ppc64',
-        'os-ppc64/testing/os-ppc64/os3-dpkg', None, 'base', 1)
+        'os-ppc64/testing/os-ppc64/os3-dpkg', None, 'base', 1),
+    Repo('riscv64', 'riscv64', 'os-riscv64/os3-dpkg', None, 'base', 0),
+    Repo('riscv64/testing', 'riscv64',
+        'os-riscv64/testing/os-riscv64/os3-dpkg', None, 'base', 1)
 )
 
 def init_db(cur):
