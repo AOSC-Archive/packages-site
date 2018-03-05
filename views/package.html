@@ -24,18 +24,28 @@
 {%- endfor %}
 <p><b class="pkg-field">Links</b>:
 <a href="/changelog/{{ pkg['name']|urlencode }}">Changelog</a>,
-{% if pkg['srctype'] -%}
-{% if 'srcurl_base' in pkg -%}
-<a href="{{ pkg['srcurl_base'] }}">Upstream source</a>
-<a href="{{ pkg['srcurl'] }}">({{ pkg['srctype'] }})</a>,
-{%- else -%}
-<a href="{{ pkg['srcurl'] }}">Upstream source ({{ pkg['srctype'] }})</a>,
-{%- endif %}
-{%- endif %}
 {% if pkg['hasrevdep'] -%}
 <a href="/revdep/{{ pkg['name']|urlencode }}">Reverse dependency</a>,
 {%- endif %}
 <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/issues/new?title={{ pkg['name']|urlencode }}%3A%20">Report issues</a></p>
+{% if pkg['srctype'] -%}
+<p><b class="pkg-field" title="auto detected">Upstream</b>:
+{% if 'srcurl_base' in pkg -%}
+<a href="{{ pkg['srcurl_base'] }}">source</a>
+<a href="{{ pkg['srcurl'] }}">({{ pkg['srctype'] }})</a>
+{%- else -%}
+<a href="{{ pkg['srcurl'] }}">source ({{ pkg['srctype'] }})</a>
+{%- endif %}{% if 'upstream' in pkg -%}, latest version
+<span class="pkg-upstream pkg-upstream-{{ pkg['upstream']['ver_compare'] }}" title="{{ pkg['upstream']['updated']|strftime('%Y-%m-%d %H:%M:%S') }}">
+<a href="{{ pkg['upstream']['url'] }}">{{ pkg['upstream']['version'] }}</a></span>
+{% if pkg['upstream']['version_anitya'] and pkg['upstream']['version'] != pkg['upstream']['version_anitya'] %}
+<i>or</i>
+<span class="pkg-upstream pkg-upstream-{{ pkg['upstream']['ver_compare_anitya'] }}" title="{{ pkg['upstream']['updated']|strftime('%Y-%m-%d %H:%M:%S') }}">
+<a href="https://release-monitoring.org/project/{{ pkg['upstream']['id_anitya'] }}/">{{ pkg['upstream']['version_anitya'] }}</a></span>
+{%- endif %}
+{%- endif %}
+</p>
+{%- endif %}
 {%- endif %}
 <h2>Available versions</h2>
 {% if pkg['full_version'] is none -%}

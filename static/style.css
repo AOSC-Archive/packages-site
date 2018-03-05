@@ -226,6 +226,12 @@ tr {
 .pkg-dep {
   white-space: nowrap;
 }
+.pkg-upstream[title] {
+  border-bottom: none;
+}
+.pkg-upstream-old {
+  font-weight: bold;
+}
 .dpkg-ver-deprecated {
   background-color: rgba(128, 128, 128, .12);
 }

@@ -22,7 +22,7 @@ import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, \
                   sizeof_fmt, parse_fail_arch, Pager
 
-__version__ = '1.6'
+__version__ = '1.7'
 
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
@@ -68,6 +68,16 @@ SELECT DISTINCT
   '' dependency, 0 noarch, NULL fail_arch, NULL srctype, NULL srcurl,
   0 hasrevdep
 FROM dpkg_packages WHERE package = ?
+'''
+
+SQL_GET_PISS_VERSION = '''
+SELECT
+  pu.version, pu.time updated, pu.url, ap.id id_anitya,
+  ap.latest_version version_anitya, ap.updated_on updated_anitya
+FROM piss.package_upstream pu
+LEFT JOIN piss.anitya_link al USING (package)
+LEFT JOIN piss.anitya_projects ap ON al.projectid=ap.id
+WHERE pu.package=?
 '''
 
 SQL_GET_PACKAGE_CHANGELOG = '''
@@ -629,6 +639,17 @@ def package(name, db):
                 pkg['srcurl_base'] = pkg['srcurl']
         if pkg['srcurl_base'].endswith('.git'):
             pkg['srcurl_base'] = pkg['srcurl_base'][:-4]
+    db.execute("ATTACH 'data/piss.db' AS piss")
+    res_upstream = db.execute(SQL_GET_PISS_VERSION, (name,)).fetchone()
+    if res_upstream:
+        pkg['upstream'] = dict(res_upstream)
+        pkg['upstream']['ver_compare'] = VER_REL[
+            version_compare(pkg['version'], res_upstream['version'])]
+        if res_upstream['version_anitya']:
+            pkg['upstream']['ver_compare_anitya'] = VER_REL[
+                version_compare(pkg['version'], res_upstream['version_anitya'])]
+        else:
+            pkg['upstream']['ver_compare_anitya'] = 'null'
     return render('package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
 
 @app.route('/changelog/<name>')
