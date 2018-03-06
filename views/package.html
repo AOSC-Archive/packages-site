@@ -22,6 +22,7 @@
 {% endfor %}
 </p>{%- endif %}
 {%- endfor %}
+{%- endif %}
 <p><b class="pkg-field">Links</b>:
 <a href="/changelog/{{ pkg['name']|urlencode }}">Changelog</a>,
 {% if pkg['hasrevdep'] -%}
@@ -40,7 +41,6 @@
 <a href="{{ pkg['upstream']['url'] }}">{{ pkg['upstream']['version'] }}</a></span>
 {%- endif %}
 </p>
-{%- endif %}
 {%- endif %}
 <h2>Available versions</h2>
 {% if pkg['full_version'] is none -%}

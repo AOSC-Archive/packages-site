@@ -363,6 +363,7 @@ RE_FTS5_COLSPEC = re.compile(r'(?<!")(\w*-[\w-]*)(?!")')
 RE_SRCHOST = re.compile(r'^https://(github\.com|bitbucket\.org|gitlab\.com)')
 RE_PYPI = re.compile(r'^https?://pypi\.(python\.org|io)')
 RE_PYPISRC = re.compile(r'^https?://pypi\.(python\.org|io)/packages/source/')
+RE_PRERELEASE = re.compile('alpha|pre|rc|dev|999', re.I)
 
 application = app = bottle.Bottle()
 plugin = bottle_sqlite.Plugin(
@@ -647,8 +648,11 @@ def package(name, db):
     res_upstream = db.execute(SQL_GET_PISS_VERSION, (name, name)).fetchone()
     if res_upstream:
         pkg['upstream'] = dict(res_upstream)
-        pkg['upstream']['ver_compare'] = VER_REL[
-            version_compare(pkg['version'], res_upstream['version'])]
+        if RE_PRERELEASE.search(res_upstream['version']):
+            pkg['upstream']['ver_compare'] = 'pre'
+        else:
+            pkg['upstream']['ver_compare'] = VER_REL[
+                version_compare(pkg['version'], res_upstream['version'])]
     return render('package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
 
 @app.route('/changelog/<name>')
