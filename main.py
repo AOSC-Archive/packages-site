@@ -72,12 +72,16 @@ FROM dpkg_packages WHERE package = ?
 
 SQL_GET_PISS_VERSION = '''
 SELECT
-  pu.version, pu.time updated, pu.url, ap.id id_anitya,
-  ap.latest_version version_anitya, ap.updated_on updated_anitya
+  pu.version, pu.time updated, pu.url
 FROM piss.package_upstream pu
-LEFT JOIN piss.anitya_link al USING (package)
-LEFT JOIN piss.anitya_projects ap ON al.projectid=ap.id
 WHERE pu.package=?
+UNION ALL
+SELECT
+  ap.latest_version version, ap.updated_on updated,
+  ('https://release-monitoring.org/project/' || ap.id || '/') url
+FROM piss.anitya_link al
+LEFT JOIN piss.anitya_projects ap ON al.projectid=ap.id
+WHERE al.package=?
 '''
 
 SQL_GET_PACKAGE_CHANGELOG = '''
@@ -640,16 +644,11 @@ def package(name, db):
         if pkg['srcurl_base'].endswith('.git'):
             pkg['srcurl_base'] = pkg['srcurl_base'][:-4]
     db.execute("ATTACH 'data/piss.db' AS piss")
-    res_upstream = db.execute(SQL_GET_PISS_VERSION, (name,)).fetchone()
+    res_upstream = db.execute(SQL_GET_PISS_VERSION, (name, name)).fetchone()
     if res_upstream:
         pkg['upstream'] = dict(res_upstream)
         pkg['upstream']['ver_compare'] = VER_REL[
             version_compare(pkg['version'], res_upstream['version'])]
-        if res_upstream['version_anitya']:
-            pkg['upstream']['ver_compare_anitya'] = VER_REL[
-                version_compare(pkg['version'], res_upstream['version_anitya'])]
-        else:
-            pkg['upstream']['ver_compare_anitya'] = 'null'
     return render('package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
 
 @app.route('/changelog/<name>')
