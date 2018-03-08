@@ -74,14 +74,22 @@
 {%- endfor %}
   <tr>
     <th><span title="Links to Git repo">Source Tree</span></th>
-    <th>Package Count</th>
+    <th>
+      <span class="tab"><span title="Package count">Count</span></span>
+      <span class="tab"><span title="Packages with updated upstream">Lagging</span></span>
+    </th>
     <th>Last Update (UTC)</th>
   </tr>
 {% for tree in source_trees -%}
   <tr>
     <td class="repo-name"><a href="{{ tree['url'] }}">{{ tree['name'] }}</a></td>
     <td class="repo-pkgcount">
-      <a href="/tree/{{ tree['name'] }}" class="num">{{ tree['pkgcount'] }}</a>
+      <span class="repo-pkgcount tab">
+        <a href="/tree/{{ tree['name'] }}" class="num">{{ tree['pkgcount'] }}</a>
+      </span>
+      <span class="repo-lagging tab">
+        <a href="/srcupd/{{ tree['name'] }}" class="num">{{ tree['srcupd'] }}</a>
+      </span>
     </td>
     <td class="repo-date">
       <time datetime="{{ tree['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ tree['date']|strftime('%Y-%m-%d %H:%M') }}</time>

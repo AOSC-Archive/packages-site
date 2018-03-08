@@ -22,7 +22,7 @@ import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, \
                   sizeof_fmt, parse_fail_arch, Pager
 
-__version__ = '1.7'
+__version__ = '1.8'
 
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
@@ -70,18 +70,10 @@ SELECT DISTINCT
 FROM dpkg_packages WHERE package = ?
 '''
 
+SQL_ATTACH_PISS = "ATTACH 'data/piss.db' AS piss"
+
 SQL_GET_PISS_VERSION = '''
-SELECT
-  pu.version, pu.time updated, pu.url
-FROM piss.package_upstream pu
-WHERE pu.package=?
-UNION ALL
-SELECT
-  ap.latest_version version, ap.updated_on updated,
-  ('https://release-monitoring.org/project/' || ap.id || '/') url
-FROM piss.anitya_link al
-LEFT JOIN piss.anitya_projects ap ON al.projectid=ap.id
-WHERE al.package=?
+SELECT version, updated, url FROM piss.v_package_upstream WHERE package=?
 '''
 
 SQL_GET_PACKAGE_CHANGELOG = '''
@@ -199,6 +191,17 @@ GROUP BY name
 ORDER BY name
 '''
 
+SQL_GET_PACKAGE_SRCUPD = '''
+SELECT
+  vp.name, vp.version, vpu.version upstream_version,
+  vpu.updated, vpu.url upstream_url
+FROM v_packages vp
+INNER JOIN piss.v_package_upstream vpu ON vpu.package=vp.name
+WHERE vp.tree=? AND (NOT vpu.version LIKE (vp.version || '%'))
+  AND (vp.version < vpu.version COLLATE vercomp)
+ORDER BY vp.name
+'''
+
 SQL_GET_PACKAGE_LIST = '''
 SELECT
   name, tree, tree_category, branch, category, section, pkg_section, directory,
@@ -234,12 +237,18 @@ ORDER BY drs_m.packagecnt DESC, dr.testing ASC
 
 SQL_GET_TREES = '''
 SELECT
-  p.tree name, t.category, t.url, max(pv.commit_time) date,
-  count(DISTINCT p.name) pkgcount
-FROM packages p
-INNER JOIN package_versions pv ON pv.package=p.name
-LEFT JOIN trees t ON t.name=p.tree
-GROUP BY p.tree
+  tree name, category, url, max(date) date, count(name) pkgcount,
+  sum(ver_compare) srcupd
+FROM (
+  SELECT
+    p.name, p.tree, t.category, t.url, p.commit_time date,
+    (CASE WHEN vpu.version LIKE (p.version || '%') THEN 0 ELSE
+     p.version < vpu.version COLLATE vercomp END) ver_compare
+  FROM v_packages p
+  LEFT JOIN trees t ON t.name=p.tree
+  LEFT JOIN piss.v_package_upstream vpu ON vpu.package=p.name
+) q1
+GROUP BY tree
 ORDER BY pkgcount DESC
 '''
 
@@ -363,7 +372,6 @@ RE_FTS5_COLSPEC = re.compile(r'(?<!")(\w*-[\w-]*)(?!")')
 RE_SRCHOST = re.compile(r'^https://(github\.com|bitbucket\.org|gitlab\.com)')
 RE_PYPI = re.compile(r'^https?://pypi\.(python\.org|io)')
 RE_PYPISRC = re.compile(r'^https?://pypi\.(python\.org|io)/packages/source/')
-RE_PRERELEASE = re.compile('alpha|pre|rc|dev|999', re.I)
 
 application = app = bottle.Bottle()
 plugin = bottle_sqlite.Plugin(
@@ -495,6 +503,7 @@ db_repos.value = {}
 
 
 def db_trees(db, ttl=1800):
+    db.execute(SQL_ATTACH_PISS)
     now = time.monotonic()
     if now - db_trees.last_updated > ttl:
         d = collections.OrderedDict((row['name'], dict(row))
@@ -644,12 +653,12 @@ def package(name, db):
                 pkg['srcurl_base'] = pkg['srcurl']
         if pkg['srcurl_base'].endswith('.git'):
             pkg['srcurl_base'] = pkg['srcurl_base'][:-4]
-    db.execute("ATTACH 'data/piss.db' AS piss")
-    res_upstream = db.execute(SQL_GET_PISS_VERSION, (name, name)).fetchone()
+    db.execute(SQL_ATTACH_PISS)
+    res_upstream = db.execute(SQL_GET_PISS_VERSION, (name,)).fetchone()
     if res_upstream:
         pkg['upstream'] = dict(res_upstream)
-        if RE_PRERELEASE.search(res_upstream['version']):
-            pkg['upstream']['ver_compare'] = 'pre'
+        if res_upstream['version'].startswith(pkg['version']):
+            pkg['upstream']['ver_compare'] = 'same'
         else:
             pkg['upstream']['ver_compare'] = VER_REL[
                 version_compare(pkg['version'], res_upstream['version'])]
@@ -704,6 +713,23 @@ def lagging(repo, db):
     else:
         return render('error.html',
             error="There's no lagging packages.")
+
+@app.route('/srcupd/<tree>')
+def srcupd(tree, db):
+    page, pagesize = get_page()
+    trees = db_trees(db)
+    if tree not in trees:
+        return bottle.HTTPResponse(render('error.html',
+                error='Source tree "%s" not found.' % tree), 404)
+    packages = []
+    res = Pager(db.execute(SQL_GET_PACKAGE_SRCUPD, (tree,)), pagesize, page)
+    for row in res:
+        packages.append(dict(row))
+    if packages:
+        return render('srcupd.html',
+            tree=tree, packages=packages, page=pagination(res))
+    else:
+        return render('error.html', error="There's no lagging packages.")
 
 @app.route('/ghost/<repo:path>')
 def ghost(repo, db):
