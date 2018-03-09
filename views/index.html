@@ -1,9 +1,13 @@
 {% extends "base.html" %}
+{% block extraheader -%}
+<link rel="canonical" href="https://packages.aosc.io/">
+{%- endblock %}
 {% block banner %}<h1>AOSC Packages</h1>
 <p>AOSC has a total of <span class="num">{{ total }}</span> packages{# across <span class="num">{{ archs }}</span> architectures #}.</p>
 {% endblock %}
 {% block main %}
-<h2>Latest Updates</h2>
+<h2>Latest Source Updates</h2>
+<p>These updates will be available in the dpkg source at the end of each month.</p>
 <table class="packages">
 <tbody>
 {% for pkg in updates -%}
@@ -11,43 +15,85 @@
     <td class="pkg-name">
       <a href="/packages/{{ pkg['name'] }}">{{ pkg['name'] }}</a>
     </td>
-    <td class="pkg-version dpkg-ver-{{ pkg['ver_compare'] }}">{{ pkg['full_version'] }}</td>
+    <td class="pkg-version">{{ pkg['full_version'] }}</td>
     <td class="pkg-description">{{ pkg['description'] }}</td>
   </tr>
 {%- endfor %}
+  <tr>
+    <td class="pkg-more" colspan="3">
+      <a href="/updates">See more updates</a>
+    </td>
+  </tr>
 </tbody>
 </table>
-{% include 'legend.inc.html' %}
 <h2>Repositories and Trees</h2>
 <table class="packages">
 <tbody>
   <tr>
-    <th>Repo</th>
-    <th>Package Number</th>
-    <th>Last Update</th>
+    <th><span title="Dpkg source">Repository</span></th>
+    <th>
+      <span class="tab"><span title="Package count">Count</span></span>
+      <span class="tab"><span title="Packages not found in source tree">Ghost</span></span>
+      <span class="tab"><span title="Updates of source tree not available in repo">Lagging</span></span>
+      <span class="tab"><span title="Packages in source tree not available in repo">Missing</span></span>
+    </th>
+    <th>Last Update (UTC)</th>
   </tr>
+{% for category, repos in repo_categories -%}
+{% if category and repos -%}
+  <tr class="repo-row">
+    <th class="repo-category" colspan="3">{{ category }}</th>
+  </tr>
+{%- endif %}
 {% for repo in repos -%}
-  <tr>
-    <td class="repo-name"><a href="/repo/{{ repo['name'] }}">{{ repo['name'] }}</a></td>
-    <td class="repo-pkgcount">
-      <span class="num">{{ repo['pkgcount'] }}</span>
-      (<a href="/lagging/{{ repo['name'] }}" title="Show packages not available in {{ repo['name'] }}">lagging</a>{% if repo['ghost'] %}
-      | <a href="/ghost/{{ repo['name'] }}" class="num" title="Show {{ repo['name'] }} packages not found in source tree">{{ repo['ghost'] }} ghost</a>
-      {%- endif %})
+  <tr class="repo-row{{ ' repo-testing' if repo['testing'] else '' }}">
+    <td class="repo-name{{ ' repo-name-testing' if repo['testing'] else '' }}">
+      {{ 'testing' if repo['testing'] else repo['name'] }}
     </td>
-    <td class="repo-date"><time datetime="{{ repo['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}"></time>{{ repo['date']|strftime('%Y-%m-%d %H:%M GMT') }}</td>
+    <td>
+    <span class="repo-pkgcount tab">
+      <a href="/repo/{{ repo['name'] }}" class="num">{{ repo['pkgcount'] }}</a>
+    </span>
+    <span class="repo-ghost tab">
+      <a href="/ghost/{{ repo['name'] }}" class="num">{{ repo['ghost'] }}</a>
+    </span>
+    {% if not repo['testing'] -%}
+    <span class="repo-lagging tab">
+      <a href="/lagging/{{ repo['name'] }}" class="num">{{ repo['lagging'] }}</a>
+    </span>
+    <span class="repo-missing tab">
+      <a href="/missing/{{ repo['name'] }}" class="num">{{ repo['missing'] }}</a>
+    </span>
+    {% endif %}
+    </td>
+    <td class="repo-date">
+      <time datetime="{{ repo['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ repo['date']|strftime('%Y-%m-%d %H:%M') }}</time>
+    </td>
   </tr>
 {%- endfor %}
+{%- endfor %}
   <tr>
-    <th>Source Tree</th>
-    <th>Package Number</th>
-    <th>Last Update</th>
+    <th><span title="Links to Git repo">Source Tree</span></th>
+    <th>
+      <span class="tab"><span title="Package count">Count</span></span>
+      <span class="tab"><span title="Packages with updated upstream">Lagging</span></span>
+    </th>
+    <th>Last Update (UTC)</th>
   </tr>
 {% for tree in source_trees -%}
   <tr>
-    <td class="repo-name"><a href="https://github.com/AOSC-Dev/{{ tree['name'] }}">{{ tree['name'] }}</a></td>
-    <td class="repo-pkgcount"><a href="/tree/{{ tree['name'] }}" class="num" title="Show packages in {{ tree['name'] }}">{{ tree['pkgcount'] }}</a></td>
-    <td class="repo-date"><time datetime="{{ tree['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}"></time>{{ tree['date']|strftime('%Y-%m-%d %H:%M GMT') }}</td>
+    <td class="repo-name"><a href="{{ tree['url'] }}">{{ tree['name'] }}</a></td>
+    <td class="repo-pkgcount">
+      <span class="repo-pkgcount tab">
+        <a href="/tree/{{ tree['name'] }}" class="num">{{ tree['pkgcount'] }}</a>
+      </span>
+      <span class="repo-lagging tab">
+        <a href="/srcupd/{{ tree['name'] }}" class="num">{{ tree['srcupd'] }}</a>
+      </span>
+    </td>
+    <td class="repo-date">
+      <time datetime="{{ tree['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ tree['date']|strftime('%Y-%m-%d %H:%M') }}</time>
+    </td>
   </tr>
 {%- endfor %}
 </tbody>

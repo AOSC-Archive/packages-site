@@ -1,19 +1,25 @@
 {% extends "base.html" %}
-{% block title %}Search "{{ q }}" - AOSC Packages{% endblock %}
-{% block banner %}<h1>Search "{{ q }}"</h1>
-<p>Found <span class="num">{{ packages|length }} packages.</span></p>{% endblock %}
+{% block title %}Search for "{{ q }}" - AOSC Packages{% endblock %}
+{% block banner %}<h1>Search for "{{ q }}"</h1>
+<p>Found <span class="num">{{ page.count }} packages.</span></p>{% endblock %}
 {% block main %}
+{% if packages -%}
 <table class="packages">
 <tbody>
 {% for pkg in packages -%}
   <tr>
     <td class="pkg-name">
-      <a href="/packages/{{ pkg['name'] }}">{{ pkg['name'] }}</a>
+      <a href="/packages/{{ pkg['name'] }}">{{ pkg['name_highlight']|safe }}</a>
     </td>
-    <td class="pkg-version">{{ pkg['full_version'] or pkg['version'] }}</td>
-    <td class="pkg-description">{{ pkg['description'] }}</td>
+    <td class="pkg-version">{{ pkg['full_version'] or '' }}</td>
+    <td class="pkg-description">{{ pkg['desc_highlight']|safe }}</td>
   </tr>
 {%- endfor %}
 </tbody>
 </table>
+{% include 'pagination.inc.html' %}
+{%- else -%}
+<div class="error">No packages matching "{{ q }}" found.</div>
+{%- endif %}
+<div class="tips">Didn't find what you need? You can <a href="https://github.com/AOSC-Dev/aosc-os-abbs/issues/new?title=pakreq%3A%20{{ q|urlencode }}&body=URL%3A%20%0A%0ADescription%3A%20">request for the package</a>.</div>
 {% endblock main %}

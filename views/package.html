@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ pkg['name'] }} - AOSC Packages{% endblock %}
 {% block banner %}<h1>{{ pkg['name'] }}
-<span class="pkg-version">{{ pkg['version'] }}</span>{% if pkg['release'] %}-<span class="pkg-version pkg-release">{{ pkg['release'] }}</span>{% endif %}
+{% if pkg['version'] %}<span class="pkg-version">{{ pkg['version'] }}</span>{% if pkg['release'] %}-<span class="pkg-version pkg-release">{{ pkg['release'] }}</span>{% endif %}{% endif %}
 </h1>
 <p class="pkg-description">{{ pkg['description'] }}</p>
 {% endblock %}
@@ -9,7 +9,9 @@
 {% block main %}
 <div class="package" id="{{ pkg['name'] }}">
 {% if pkg['tree'] -%}
-<p><b class="pkg-field">Source</b>: <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/tree/{{ 'staging' if pkg['tree'] == 'aosc-os-abbs' else 'master' }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/{{ pkg['directory'] }}/spec"><span class="pkg-section">{{ pkg['tree'] }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/</span>{{ pkg['directory'] }}</a></p>
+<p><b class="pkg-field">Source</b>: <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/tree/{{ pkg['branch'] }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/{{ pkg['directory'] }}"><span class="pkg-section">{{ pkg['tree'] }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/</span>{{ pkg['directory'] }}</a></p>
+{%- else -%}
+<p><b class="pkg-field">Source</b>: (missing)</p>
 {%- endif %}
 {% if pkg['dependency'] -%}
 {% for rel in dep_rel -%}
@@ -21,23 +23,48 @@
 </p>{%- endif %}
 {%- endfor %}
 {%- endif %}
+<p><b class="pkg-field">Links</b>:
+<a href="/changelog/{{ pkg['name']|urlencode }}">Changelog</a>,
+{% if pkg['hasrevdep'] -%}
+<a href="/revdep/{{ pkg['name']|urlencode }}">Reverse dependency</a>,
+{%- endif %}
+<a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/issues/new?title={{ pkg['name']|urlencode }}%3A%20">Report issues</a></p>
+{% if pkg['srctype'] -%}
+<p><b class="pkg-field" title="auto detected">Upstream</b>:
+{% if 'srcurl_base' in pkg -%}
+<a href="{{ pkg['srcurl_base'] }}">source</a>
+<a href="{{ pkg['srcurl'] }}">({{ pkg['srctype'] }})</a>
+{%- else -%}
+<a href="{{ pkg['srcurl'] }}">source ({{ pkg['srctype'] }})</a>
+{%- endif %}{% if 'upstream' in pkg -%}, latest version
+<span class="pkg-upstream pkg-upstream-{{ pkg['upstream']['ver_compare'] }}" title="{{ pkg['upstream']['updated']|strftime('%Y-%m-%d %H:%M:%S') }}">
+<a href="{{ pkg['upstream']['url'] }}">{{ pkg['upstream']['version'] }}</a></span>
+{%- endif %}
+</p>
+{%- endif %}
 <h2>Available versions</h2>
+{% if pkg['full_version'] is none -%}
+<p class="pkg-deprecated">(Deprecated)</p>
+{% endif -%}
 <div class="table-wrapper">
 <table class="packages">
 <thead>
   <tr>
     <th>Version</th>
-    {% for repo in pkg['repo'] -%}
-    <th>{{ repo }}</th>
+    {% for version in pkg['versions'] -%}
+    <th class="dpkg-ver">{{ version }}</th>
     {%- endfor %}
   </tr>
 </thead>
 <tbody>
 {% for row in pkg['dpkg_matrix'] -%}
   <tr>
-    <td class="dpkg-ver">{{ row[0] }}</td>
+    <td>{{ row[0] }}</td>
     {% for col in row[1] -%}
-      {% if col -%}<td class="dpkg">
+      {% if col -%}
+      {% if col['testing'] -%}
+      <td class="dpkg dpkg-testing" title="testing">
+      {%- else -%}<td class="dpkg">{%- endif %}
         <a href="https://repo.aosc.io/{{ repos[col['repo']]['path'] }}/{{ col['filename'] }}">
           {{ col['size']|sizeof_fmt }}
         </a>

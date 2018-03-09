@@ -42,19 +42,6 @@ a:visited {
   font-size: 20px;
   margin: 5px 0;
 }
-.banner input {
-  font-size: 1.2em;
-  margin: .6em 0 1em;
-  width: 15em;
-  background-color: transparent;
-  border-width: 0px 0px 2px;
-  border-style: solid;
-  border-color: #3f5172;
-}
-.banner input:focus{
-  border-color: #577db5;
-  outline: 0;
-}
 .package h2 {
   font-size: 1.4em;
   margin-bottom: .5em;
@@ -130,6 +117,10 @@ tr {
 .autocomplete-suggestion b {
   font-weight: normal;
   color: #577db5;
+}
+.autocomplete-noredir {
+  font-style: italic;
+  text-indent: 0.4em;
 }
 .autocomplete-suggestion.selected {
   background: #f0f0f0;
@@ -228,6 +219,22 @@ tr {
   width: 100%;
 }
 }
+.pkg-more {
+  text-align: center;
+  background-color: #f5f5f5;
+}
+.pkg-dep {
+  white-space: nowrap;
+}
+.pkg-upstream[title] {
+  border-bottom: none;
+}
+.pkg-upstream-old {
+  font-weight: bold;
+}
+.dpkg-ver-deprecated {
+  background-color: rgba(128, 128, 128, .12);
+}
 .dpkg-ver-old, .pkg-missing {
   background-color: rgba(255, 255, 0, .12);
 }
@@ -237,8 +244,94 @@ tr {
 .dpkg-ver, .pkg-version {
   white-space: nowrap;
 }
+.legend p {
+  padding: 0.2em;
+  margin: 0.2em 0;
+}
+.repo-category {
+  padding-left: 1.8em;
+}
+.repo-testing, .dpkg-testing {
+  background-color: aliceblue;
+}
+.repo-name-testing::before {
+  content: '└';
+}
+.sql-special {
+  font-style: italic;
+  background-color: rgba(255, 255, 0, .12);
+}
+#sqlinput {
+  width: 100%;
+  font-family: monospace;
+  border: 1px solid #ddd;
+  box-sizing: border-box;
+  outline: 0;
+}
+#sqlinput:focus {
+  border-color: #bbb;
+}
+.inputsubmit {
+  color: #fff;
+  padding: .5em 2em;
+  margin-bottom: .75em;
+  background-color: #475c81;
+  font-size: 1em;
+  border: none;
+  border-radius: 3px;
+  float: right;
+}
+.inputsubmit:focus, .inputsubmit:hover {
+  background-color: #546e9c;
+  outline: 0;
+}
+.inputsubmit:active {
+  background-color: #32405a;
+  outline: 0;
+}
+span[title] {
+  border-bottom: 1px dashed #999;
+}
+.tab {
+  display: inline-block;
+  min-width: 4em;
+  margin-top: 0.1em;
+}
 .w45 {
   width: 45%;
+}
+.pagination {
+  margin-top: 1em;
+  text-align: right;
+}
+.page-btn {
+  font-size: 1.05em;
+  display: inline-block;
+  padding: 0.25em 0.5em;
+  margin: 0.2em 0.25em;
+  background-color: #eee;
+  border-radius: 2px;
+}
+.page-ellip {
+  margin: 0 0.2em;
+}
+a.page-btn {
+  background-color: #e3f2fd;
+}
+a.page-btn:hover, a.page-btn:focus, a.page-btn:visited {
+  text-decoration: none;
+}
+.error {
+  background-color: rgba(255, 0, 0, .12);
+  padding: .5em;
+  margin-bottom: .5em;
+}
+.tips {
+  border: 1px solid #ddd;
+  background-color: aliceblue;
+  padding: .5em;
+  margin-top: 1em;
+  margin-bottom: .5em;
 }
 .page-footer {
   text-align: center;

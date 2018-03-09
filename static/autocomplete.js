@@ -247,6 +247,7 @@ function prefixSearch(trie, term){
   if (found) {
     matches = trieitems(subtrie, term);
   }
+  matches.sort();
   // console.log(term, matches);
   return matches;
 }
@@ -263,10 +264,14 @@ document.addEventListener("DOMContentLoaded", function(event) {
       // escape special characters
       search = search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
       var re = new RegExp("(" + search.split(' ').join('|') + ")", "gi");
-      return '<a class="autocomplete-suggestion" data-val="' + item + '" href="/packages/' + item + '">' + item.replace(re, "<b>$1</b>") + '</a>';
+      var s = '<a class="autocomplete-suggestion" data-val="' + item + '" href="/packages/' + item + '">' + item.replace(re, "<b>$1</b>") + '</a>';
+      if (item === search) {
+        s += '<a class="autocomplete-suggestion autocomplete-noredir" data-val="' + item + '" href="/search/?q=' + item + '&noredir=1">Search for "' + item + '"</a>';
+      }
+      return s;
     },
     onSelect: function(event, term, item) {
-      window.location.href = '/packages/' + term;
+      window.location.href = item.getAttribute("href");
     }
   });
 });
