@@ -44,6 +44,7 @@ def render_graph(name, tree, deps, rels, rev=False, engine='dot'):
         node_attr={'shape': 'box', 'fontcolor': 'black', 'margin': '0.2,0.1'},
         edge_attr={'color': 'grey', 'dir': 'back', 'arrowtail': 'none'}
     )
+    g.graph_attr['overlap'] = 'prism'
     g.graph_attr['rankdir'] = 'LR'
     for k, v in rels.items():
         attr = {}
