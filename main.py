@@ -655,7 +655,7 @@ def package(name, db):
             pkg['srcurl_base'] = pkg['srcurl_base'][:-4]
     db.execute(SQL_ATTACH_PISS)
     res_upstream = db.execute(SQL_GET_PISS_VERSION, (name,)).fetchone()
-    if res_upstream:
+    if res_upstream and res_upstream['version']:
         pkg['upstream'] = dict(res_upstream)
         if res_upstream['version'].startswith(pkg['version']):
             pkg['upstream']['ver_compare'] = 'same'
