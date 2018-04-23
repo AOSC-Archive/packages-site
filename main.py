@@ -222,8 +222,10 @@ SQL_GET_REPO_COUNT = '''
 SELECT
   drs.repo name, dr.realname realname, dr.path path,
   dr.date date, dr.testing testing, dr.category category,
-  drs.packagecnt pkgcount, drs.ghostcnt ghost,
-  drs.laggingcnt lagging, drs.missingcnt missing
+  coalesce(drs.packagecnt, 0) pkgcount,
+  coalesce(drs.ghostcnt, 0) ghost,
+  coalesce(drs.laggingcnt, 0) lagging,
+  coalesce(drs.missingcnt, 0) missing
 FROM dpkg_repo_stats drs
 LEFT JOIN dpkg_repos dr ON dr.name=drs.repo
 LEFT JOIN (
@@ -232,7 +234,7 @@ LEFT JOIN (
   LEFT JOIN dpkg_repos dr2 ON dr2.name=drs2.repo
   WHERE dr2.testing=0
 ) drs_m ON drs_m.repo=dr.realname
-ORDER BY drs_m.packagecnt DESC, dr.testing ASC
+ORDER BY drs_m.packagecnt DESC, dr.realname ASC, dr.testing ASC
 '''
 
 SQL_GET_TREES = '''
