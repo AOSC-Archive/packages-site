@@ -18,8 +18,9 @@
 {% if rel in pkg['dependency'] -%}<p>
 <b class="pkg-field pkg-dep-rel">{{ dep_rel[rel] }}</b>:
 {% for dep in pkg['dependency'][rel] -%}
+{% if loop.index != 1 %},{% endif %}
 <span class="pkg-dep"><a href="{{ dep[0] }}">{{ dep[0] }}</a>{{ dep[1] }}</span>
-{% endfor %}
+{%- endfor %}
 </p>{%- endif %}
 {%- endfor %}
 {%- endif %}
