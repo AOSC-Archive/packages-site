@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import re
+import math
 import time
 import functools
 import collections
@@ -73,5 +74,5 @@ class Pager(collections.abc.Iterable):
             return self._pagecount
         for self.index, element in enumerate(self.iterator, self.index+1):
             pass
-        self._pagecount = (self.index+1)//self.pagesize + 1
+        self._pagecount = math.ceil((self.index+1)/self.pagesize)
         return self._pagecount
