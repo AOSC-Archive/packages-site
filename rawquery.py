@@ -18,8 +18,10 @@ def sql_auth(sqltype, arg1, arg2, dbname, source):
 
 result = {'rows': []}
 
+urifn = os.path.normpath(sys.argv[1]).replace('?', '%3f').replace('#', '%23')
+
 try:
-    conn = sqlite3.connect(sys.argv[1])
+    conn = sqlite3.connect('file:%s?mode=ro' % urifn, uri=True)
     conn.create_collation("vercomp", version_compare)
     conn.set_authorizer(sql_auth)
     cur = conn.cursor()

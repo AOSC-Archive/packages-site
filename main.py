@@ -70,7 +70,7 @@ SELECT DISTINCT
 FROM dpkg_packages WHERE package = ?
 '''
 
-SQL_ATTACH_PISS = "ATTACH 'data/piss.db' AS piss"
+SQL_ATTACH_PISS = "ATTACH 'file:data/piss.db?mode=ro' AS piss"
 
 SQL_GET_PISS_VERSION = '''
 SELECT version, updated, url FROM piss.v_package_upstream WHERE package=?
@@ -378,6 +378,7 @@ RE_PYPISRC = re.compile(r'^https?://pypi\.(python\.org|io)/packages/source/')
 application = app = bottle.Bottle()
 plugin = bottle_sqlite.Plugin(
     dbfile='data/abbs.db',
+    readonly=True,
     collations={'vercomp': version_compare}
 )
 app.install(plugin)
@@ -674,8 +675,8 @@ def changelog(name, db):
                 error='Package "%s" not found.' % name), 404,
                 content_type='text/plain; charset=UTF-8')
     pkg = dict(res)
-    db.execute('ATTACH ? AS marks', ('data/%s-marks.db' % pkg['tree'],))
-    db.execute('ATTACH ? AS fossil', ('data/%s.fossil' % pkg['tree'],))
+    db.execute('ATTACH ? AS marks', ('file:data/%s-marks.db?mode=ro' % pkg['tree'],))
+    db.execute('ATTACH ? AS fossil', ('file:data/%s.fossil?mode=ro' % pkg['tree'],))
     changelog = []
     for row in db.execute(SQL_GET_PACKAGE_CHANGELOG, (name,)):
         changelog.append(dict(row))
