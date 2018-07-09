@@ -194,11 +194,12 @@ ORDER BY name
 SQL_GET_PACKAGE_SRCUPD = '''
 SELECT
   vp.name, vp.version, vpu.version upstream_version,
-  vpu.updated, vpu.url upstream_url
+  vpu.updated, vpu.url upstream_url, vpu.tarball upstream_tarball
 FROM v_packages vp
 INNER JOIN piss.v_package_upstream vpu ON vpu.package=vp.name
 WHERE vp.tree=? AND (NOT vpu.version LIKE (vp.version || '%'))
   AND (vp.version < vpu.version COLLATE vercomp)
+  AND (? IS NULL OR vp.section = ?)
 ORDER BY vp.name
 '''
 
@@ -724,13 +725,14 @@ def srcupd(tree, db):
     if tree not in trees:
         return bottle.HTTPResponse(render('error.html',
                 error='Source tree "%s" not found.' % tree), 404)
+    section = bottle.request.query.get('section') or None
     packages = []
-    res = Pager(db.execute(SQL_GET_PACKAGE_SRCUPD, (tree,)), pagesize, page)
+    res = Pager(db.execute(SQL_GET_PACKAGE_SRCUPD, (tree, section, section)), pagesize, page)
     for row in res:
         packages.append(dict(row))
     if packages:
         return render('srcupd.html',
-            tree=tree, packages=packages, page=pagination(res))
+            tree=tree, packages=packages, section=section, page=pagination(res))
     else:
         return render('error.html', error="There's no lagging packages.")
 

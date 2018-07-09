@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Upstream source updates in "{{ tree }}" - AOSC Packages{% endblock %}
 {% block banner %}<h1>Upstream source updates in "{{ tree }}"</h1>
-<p>Found <span class="num">{{ page.count }} packages.</span></p>
+<p>Found <span class="num">{{ page.count }} packages{% if section %}
+in section "{{ section }}"{% endif %}.</span></p>
 {% endblock %}
 {% block main %}
 <table class="packages">
