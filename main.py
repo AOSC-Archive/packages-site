@@ -489,7 +489,7 @@ def db_last_modified(db, ttl=3600):
             db_last_modified.last_updated = now
             db_last_modified.value = row[0]
     return db_last_modified.value
-db_last_modified.last_updated = 0
+db_last_modified.last_updated = float('-inf')
 db_last_modified.value = 0
 
 
@@ -502,7 +502,7 @@ def db_repos(db, ttl=1800):
         db_repos.last_updated = now
         db_repos.value = d
     return db_repos.value
-db_repos.last_updated = 0
+db_repos.last_updated = float('-inf')
 db_repos.value = {}
 
 
@@ -515,7 +515,7 @@ def db_trees(db, ttl=1800):
         db_trees.last_updated = now
         db_trees.value = d
     return db_trees.value
-db_trees.last_updated = 0
+db_trees.last_updated = float('-inf')
 db_trees.value = {}
 
 
