@@ -1,6 +1,8 @@
 # packages-site
 Package list website. https://packages.aosc.io/
 
+For more information, see: https://wiki.aosc.io/developers/packages-site
+
 ## Deploy
 
 ```
