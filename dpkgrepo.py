@@ -36,58 +36,80 @@ from utils import version_compare
 logging.basicConfig(
     format='%(asctime)s %(levelname).1s %(message)s', level=logging.INFO)
 
-Repo = collections.namedtuple('Repo', 'name realname path source_tree category testing')
+# base (list all arch)
+#  - amd64
+#    - stable
+#    - testing
+#    - explosive
+#  - arm64
+#  - ...
+#  - noarch
+# overlay (list avail arch)
+#  - bsp-sunxi
+#    - arm64
+#      - stable
+#      - testing
+#      - explosive
+#    - armel
+#  - opt-avx2
+#    - amd64
+
+Repo = collections.namedtuple('Repo', (
+    'name',     # primary key
+    'realname', # overlay-arch, group key
+    'path',     # deb source path
+    'source_tree',  # git source
+    'category', # base, bsp, overlay
+    'testing'   # 0-2, testing level
+    'suite',        # deb source suite/distribution, git branch
+    'component',    # deb source component
+    'architecture', # deb source architecture
+))
 
 # we don't have gpg, must be https
 MIRROR = os.environ.get('REPO_MIRROR', 'https://repo.aosc.io/')
-REPOS = (
-    Repo('amd64', 'amd64', 'os-amd64/os3-dpkg', None, 'base', 0),
-    Repo('amd64/testing', 'amd64',
-        'os-amd64/testing/os-amd64/os3-dpkg', None, 'base', 1),
-    Repo('arm64', 'arm64', 'os-arm64/os3-dpkg', None, 'base', 0),
-    Repo('arm64/testing', 'arm64',
-        'os-arm64/testing/os-arm64/os3-dpkg', None, 'base', 1),
-    Repo('arm64-sunxi', 'arm64-sunxi',
-        'os-arm64/sunxi/os3-dpkg', 'aosc-os-arm-bsps', 'bsp', 0),
-    Repo('arm64-sunxi/testing', 'arm64-sunxi',
-        'os-arm64/sunxi/testing/os-arm64/os3-dpkg', 'aosc-os-arm-bsps', 'bsp', 1),
-    Repo('armel', 'armel', 'os-armel/os3-dpkg', None, 'base', 0),
-    Repo('armel/testing', 'armel',
-        'os-armel/testing/os-armel/os3-dpkg', None, 'base', 1),
-    Repo('armel-sunxi', 'armel-sunxi',
-        'os-armel/sunxi/os3-dpkg', 'aosc-os-arm-bsps', 'bsp', 0),
-    Repo('armel-sunxi/testing', 'armel-sunxi',
-        'os-armel/sunxi/testing/os-armel/os3-dpkg', 'aosc-os-arm-bsps', 'bsp', 1),
-    Repo('noarch', 'noarch', 'os-noarch/os3-dpkg', None, 'base', 0),
-    Repo('noarch/testing', 'noarch',
-        'os-noarch/testing/os-noarch/os3-dpkg', None, 'base', 1),
-    Repo('powerpc', 'powerpc', 'os-powerpc/os3-dpkg', None, 'base', 0),
-    Repo('powerpc/testing', 'powerpc',
-        'os-powerpc/testing/os-powerpc/os3-dpkg', None, 'base', 1),
-    Repo('ppc64', 'ppc64', 'os-ppc64/os3-dpkg', None, 'base', 0),
-    Repo('ppc64/testing', 'ppc64',
-        'os-ppc64/testing/os-ppc64/os3-dpkg', None, 'base', 1),
-    Repo('riscv64', 'riscv64', 'os-riscv64/os3-dpkg', None, 'base', 0),
-    Repo('riscv64/testing', 'riscv64',
-        'os-riscv64/testing/os-riscv64/os3-dpkg', None, 'base', 1)
+REPOPATH = 'debs'
+REPOS = []
+
+ARCHS = ('amd64', 'arm64', 'armel', 'powerpc', 'ppc64', 'riscv64', 'noarch')
+BRANCHES = ('stable', 'testing', 'explosive')
+OVERLAYS = (
+    # dpkg_repos.category, component, source, arch
+    ('base', 'main', None, ARCHS),
+    ('bsp', 'bsp-sunxi', 'aosc-os-arm-bsps', ('armel', 'arm64', 'noarch')),
+    ('overlay', 'opt-avx2', None, ('amd64',)),
+    ('overlay', 'opt-g4', None, ('powerpc',)),
 )
+for category, component, source, archs in OVERLAYS:
+    for arch in archs:
+        for testlvl, branch in enumerate(BRANCHES):
+            if category == 'base':
+                realname = arch
+            else:
+                realname = '%s-%s' % (component, arch)
+            REPOS.append(Repo(
+                realname + '/' + branch, realname, REPOPATH,
+                source, category, testlvl,
+                branch, component, arch
+            ))
+
 
 def init_db(cur):
     cur.execute('CREATE TABLE IF NOT EXISTS dpkg_repos ('
-                'name TEXT PRIMARY KEY,' # amd64/testing
-                'realname TEXT,'    # amd64
+                'name TEXT PRIMARY KEY,' # key: bsp-sunxi-armel/testing
+                'realname TEXT,'    # group key: amd64, bsp-sunxi-armel
                 'path TEXT,'
                 'source_tree TEXT,' # abbs tree
                 'category TEXT,' # base, bsp, overlay
-                'testing INTEGER,' # 0, 1
+                'testing INTEGER,'    # 0, 1, 2
+                'suite TEXT,'         # stable, testing, explosive
+                'component TEXT,'     # main, bsp-sunxi, opt-avx2
+                'architecture TEXT,'  # amd64, all
                 'origin TEXT,'
                 'label TEXT,'
-                'suite TEXT,'
                 'codename TEXT,'
                 'date INTEGER,'
                 'valid_until INTEGER,'
-                'architectures TEXT,'
-                'components TEXT,'
                 'description TEXT'
                 ')')
     cur.execute('CREATE TABLE IF NOT EXISTS dpkg_packages ('
@@ -149,7 +171,27 @@ def init_db(cur):
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_package_dependencies'
                 ' ON dpkg_package_dependencies (package)')
 
+def remove_clearsign(blob):
+    clearsign_header = b'-----BEGIN PGP SIGNED MESSAGE-----'
+    pgpsign_header = b'-----BEGIN PGP SIGNATURE-----'
+    if not blob.startswith(clearsign_header):
+        return blob
+    lines = []
+    content = False
+    for k, ln in enumerate(blob.splitlines(True)):
+        if not ln.rstrip():
+            content = True
+        elif content:
+            if ln.rstrip() == pgpsign_header:
+                break
+            elif ln.startswith(b'- '):
+                lines.append(ln[2:])
+            else:
+                lines.append(ln)
+    return b''.join(lines)
+
 def release_update(cur, repo):
+    # FIXME
     url = urllib.parse.urljoin(MIRROR, repo.path.rstrip('/') + '/Release')
     req = requests.get(url, timeout=120)
     if req.status_code == 404:
