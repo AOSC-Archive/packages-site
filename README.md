@@ -6,7 +6,7 @@ For more information, see: https://wiki.aosc.io/developers/packages-site
 ## Deploy
 
 ```
-git clone https://github.com/AOSC-Dev/abbsmeta.git
+git clone https://github.com/AOSC-Dev/abbs-meta.git
 git clone https://github.com/AOSC-Dev/packages-site.git
 cd packages-site
 pip3 install -r requirements.txt
