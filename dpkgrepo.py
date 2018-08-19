@@ -192,7 +192,7 @@ def remove_clearsign(blob):
 
 def release_update(cur, repo):
     # FIXME
-    url = urllib.parse.urljoin(MIRROR, repo.path.rstrip('/') + '/Release')
+    url = urllib.parse.urljoin(MIRROR, repo.path.rstrip('/') + '/InRelease')
     req = requests.get(url, timeout=120)
     if req.status_code == 404:
         # testing not available
@@ -208,7 +208,8 @@ def release_update(cur, repo):
         return 0, None
     else:
         req.raise_for_status()
-    rel = deb822.Release(req.text)
+    releasetxt = remove_clearsign(req.content).decode('utf-8')
+    rel = deb822.Release(releasetxt)
     cur.execute('REPLACE INTO dpkg_repos VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)', (
         repo.name, repo.realname, repo.path, repo.source_tree,
         repo.category, repo.testing,
