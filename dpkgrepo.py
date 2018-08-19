@@ -149,8 +149,27 @@ def init_db(cur):
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_package_dependencies'
                 ' ON dpkg_package_dependencies (package)')
 
+def remove_clearsign(blob):
+    clearsign_header = b'-----BEGIN PGP SIGNED MESSAGE-----'
+    pgpsign_header = b'-----BEGIN PGP SIGNATURE-----'
+    if not blob.startswith(clearsign_header):
+        return blob
+    lines = []
+    content = False
+    for k, ln in enumerate(blob.splitlines(True)):
+        if not ln.rstrip():
+            content = True
+        elif content:
+            if ln.rstrip() == pgpsign_header:
+                break
+            elif ln.startswith(b'- '):
+                lines.append(ln[2:])
+            else:
+                lines.append(ln)
+    return b''.join(lines)
+
 def release_update(cur, repo):
-    url = urllib.parse.urljoin(MIRROR, repo.path.rstrip('/') + '/Release')
+    url = urllib.parse.urljoin(MIRROR, repo.path.rstrip('/') + '/InRelease')
     req = requests.get(url, timeout=120)
     if req.status_code == 404:
         # testing not available
@@ -166,7 +185,8 @@ def release_update(cur, repo):
         return 0, None
     else:
         req.raise_for_status()
-    rel = deb822.Release(req.text)
+    releasetxt = remove_clearsign(req.content).decode('utf-8')
+    rel = deb822.Release(releasetxt)
     cur.execute('REPLACE INTO dpkg_repos VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)', (
         repo.name, repo.realname, repo.path, repo.source_tree,
         repo.category, repo.testing,
