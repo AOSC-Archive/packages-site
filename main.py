@@ -655,7 +655,7 @@ def package(name, db):
                 pkg['srcurl_base'] = 'http://' + pkg['srcurl'][6:]
             else:
                 pkg['srcurl_base'] = pkg['srcurl']
-        if pkg['srcurl_base'].endswith('.git'):
+        if 'srcurl_base' in pkg and pkg['srcurl_base'].endswith('.git'):
             pkg['srcurl_base'] = pkg['srcurl_base'][:-4]
     db.execute(SQL_ATTACH_PISS)
     res_upstream = db.execute(SQL_GET_PISS_VERSION, (name,)).fetchone()
