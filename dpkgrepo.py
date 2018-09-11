@@ -57,10 +57,9 @@ logging.basicConfig(
 Repo = collections.namedtuple('Repo', (
     'name',     # primary key
     'realname', # overlay-arch, group key
-    'path',     # deb source path
     'source_tree',  # git source
     'category', # base, bsp, overlay
-    'testing'   # 0-2, testing level
+    'testing',  # 0-2, testing level
     'suite',        # deb source suite/distribution, git branch
     'component',    # deb source component
     'architecture', # deb source architecture
@@ -69,7 +68,6 @@ Repo = collections.namedtuple('Repo', (
 # we don't have gpg, must be https
 MIRROR = os.environ.get('REPO_MIRROR', 'https://repo.aosc.io/')
 REPOPATH = 'debs'
-REPOS = []
 
 ARCHS = ('amd64', 'arm64', 'armel', 'powerpc', 'ppc64', 'riscv64', 'noarch')
 BRANCHES = ('stable', 'testing', 'explosive')
@@ -80,6 +78,7 @@ OVERLAYS = (
     ('overlay', 'opt-avx2', None, ('amd64',)),
     ('overlay', 'opt-g4', None, ('powerpc',)),
 )
+REPOS = collections.OrderedDict((k, []) for k in BRANCHES)
 for category, component, source, archs in OVERLAYS:
     for arch in archs:
         for testlvl, branch in enumerate(BRANCHES):
@@ -87,14 +86,14 @@ for category, component, source, archs in OVERLAYS:
                 realname = arch
             else:
                 realname = '%s-%s' % (component, arch)
-            REPOS.append(Repo(
-                realname + '/' + branch, realname, REPOPATH,
-                source, category, testlvl,
-                branch, component, arch
+            REPOS[branch].append(Repo(
+                realname + '/' + branch, realname,
+                source, category, testlvl, branch, component, arch
             ))
 
 
-def init_db(cur):
+def init_db(db):
+    cur = db.cursor()
     cur.execute('CREATE TABLE IF NOT EXISTS dpkg_repos ('
                 'name TEXT PRIMARY KEY,' # key: bsp-sunxi-armel/testing
                 'realname TEXT,'    # group key: amd64, bsp-sunxi-armel
@@ -170,6 +169,8 @@ def init_db(cur):
                 ' ON dpkg_packages (package, repo)')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_package_dependencies'
                 ' ON dpkg_package_dependencies (package)')
+    db.commit()
+    cur.close()
 
 def remove_clearsign(blob):
     clearsign_header = b'-----BEGIN PGP SIGNED MESSAGE-----'
@@ -190,44 +191,66 @@ def remove_clearsign(blob):
                 lines.append(ln)
     return b''.join(lines)
 
-def release_update(cur, repo):
-    # FIXME
-    url = urllib.parse.urljoin(MIRROR, repo.path.rstrip('/') + '/InRelease')
+def suite_update(db, suite, repos):
+    cur = db.cursor()
+    url = urllib.parse.urljoin(MIRROR, '/'.join((
+        REPOPATH, 'dists', suite, 'InRelease')))
     req = requests.get(url, timeout=120)
     if req.status_code == 404:
-        # testing not available
-        logging.error('dpkg source %s not found' % repo.path)
-        cur.execute('REPLACE INTO dpkg_repos VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)',
-            (repo.name, repo.realname, repo.path, repo.source_tree,
-            repo.category, repo.testing, None, None, None, None, None,
-            None, None, None, None))
-        if repo.testing:
-            cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo = ?', (repo.name,))
-            cur.execute('DELETE FROM dpkg_package_dependencies WHERE repo = ?', (repo.name,))
-            cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo = ?', (repo.name,))
-        return 0, None
+        logging.error('dpkg suite %s not found' % suite)
+        for repo in repos:
+            cur.execute('REPLACE INTO dpkg_repos VALUES '
+                '(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)',
+                (repo.name, repo.realname, REPOPATH, repo.source_tree,
+                repo.category, repo.testing, repo.suite, repo.component,
+                repo.architecture, None, None, None, None, None, None))
+        return {}
     else:
         req.raise_for_status()
     releasetxt = remove_clearsign(req.content).decode('utf-8')
     rel = deb822.Release(releasetxt)
-    cur.execute('REPLACE INTO dpkg_repos VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)', (
-        repo.name, repo.realname, repo.path, repo.source_tree,
-        repo.category, repo.testing,
-        rel.get('Origin'), rel.get('Label'), rel.get('Suite'), rel.get('Codename'),
-        calendar.timegm(parsedate(rel['Date'])) if 'Date' in rel else None,
-        calendar.timegm(parsedate(rel['Valid-Until'])) if 'Valid-Until' in rel else None,
-        rel.get('Architectures'), rel.get('Components'), rel.get('Description')
-    ))
+    pkgrepos = {}
     for item in rel['SHA256']:
-        if item['name'] == 'Packages.xz':
-            return int(item['size']), item['sha256']
+        path = item['name'].split('/')
+        if path[-1] == 'Packages.xz':
+            arch = path[1].split('-')[-1]
+            if arch == 'all':
+                arch = 'noarch'
+            pkgrepos[path[0], arch] = (
+                item['name'], int(item['size']), item['sha256'])
+    rel_date = calendar.timegm(parsedate(rel['Date'])) if 'Date' in rel else None
+    rel_valid = calendar.timegm(parsedate(rel['Valid-Until'])) if 'Valid-Until' in rel else None
+    for repo in repos:
+        pkgrepo = pkgrepos.get((repo.component, repo.architecture))
+        if pkgrepo:
+            pkgpath = '/'.join((REPOPATH, 'dists', suite, pkgrepo[0]))
+            pkgrepos[repo.component, repo.architecture] = (repo, pkgpath) + pkgrepo[1:]
+            cur.execute('REPLACE INTO dpkg_repos VALUES '
+                '(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)', (
+                repo.name, repo.realname, REPOPATH,
+                repo.source_tree, repo.category, repo.testing, repo.suite,
+                repo.component, repo.architecture, rel.get('Origin'),
+                rel.get('Label'), rel.get('Codename'), rel_date, rel_valid,
+                rel.get('Description')
+            ))
+        else:
+            cur.execute('REPLACE INTO dpkg_repos VALUES '
+                '(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)',
+                (repo.name, repo.realname, REPOPATH, repo.source_tree,
+                repo.category, repo.testing, repo.suite, repo.component,
+                repo.architecture, None, None, None, None, None, None))
+    db.commit()
+    cur.close()
+    return pkgrepos
 
 _relationship_fields = ('depends', 'pre-depends', 'recommends',
         'suggests', 'breaks', 'conflicts', 'provides', 'replaces',
         'enhances')
 
-def package_update(cur, repo, size, sha256):
-    url = urllib.parse.urljoin(MIRROR, repo.path.rstrip('/') + '/Packages.xz')
+def package_update(db, repo, path, size, sha256):
+    logging.info(repo.name)
+    cur = db.cursor()
+    url = urllib.parse.urljoin(MIRROR, path)
     req = requests.get(url, timeout=120)
     req.raise_for_status()
     assert len(req.content) == size
@@ -288,6 +311,8 @@ def package_update(cur, repo, size, sha256):
                     ' AND architecture = ? AND repo = ?', pkg)
         cur.execute('DELETE FROM dpkg_package_dependencies WHERE package = ?'
                     ' AND version = ? AND architecture = ? AND repo = ?', pkg)
+    db.commit()
+    cur.close()
 
 SQL_COUNT_REPO = '''
 REPLACE INTO dpkg_repo_stats
@@ -351,23 +376,22 @@ ON c2.repo=c1.repo
 ORDER BY c1.reponame, c1.repo
 '''
 
-def stats_update(cur):
-    cur.execute(SQL_COUNT_REPO)
+def stats_update(db):
+    db.execute(SQL_COUNT_REPO)
 
-def update(cur):
-    for repo in REPOS:
-        logging.info(repo.name)
-        size, sha256 = release_update(cur, repo)
-        if sha256:
-            package_update(cur, repo, size, sha256)
-    stats_update(cur)
+def update(db):
+    for suite, repos in REPOS.items():
+        pkgrepos = suite_update(db, suite, repos)
+        for repo, path, size, sha256 in pkgrepos.values():
+            package_update(db, repo, path, size, sha256)
+    stats_update(db)
 
 def main(dbfile):
     db = sqlite3.connect(dbfile)
     db.create_collation("vercomp", version_compare)
+    init_db(db)
+    update(db)
     cur = db.cursor()
-    init_db(cur)
-    update(cur)
     cur.execute('PRAGMA optimize')
     db.commit()
 
