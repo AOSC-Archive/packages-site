@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
 import re
 import math
 import time
+import weakref
 import functools
 import collections
 from debian_support import version_compare as _version_compare
@@ -40,6 +42,19 @@ def parse_fail_arch(s):
         return TestList(match.group(1), match.group(2).split('|'))
     else:
         return TestList('@', [s])
+
+class FileRemover(object):
+    def __init__(self):
+        self.weak_references = dict()  # weak_ref -> filepath to remove
+
+    def cleanup_once_done(self, response, filepath):
+        wr = weakref.ref(response, self._do_cleanup)
+        self.weak_references[wr] = filepath
+
+    def _do_cleanup(self, wr):
+        filepath = self.weak_references[wr]
+        # shutil.rmtree(filepath, ignore_errors=True)
+        os.unlink(filepath)
 
 class Pager(collections.abc.Iterable):
     def __init__(self, iterable, pagesize, page=1):

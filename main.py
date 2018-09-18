@@ -10,6 +10,7 @@ import pickle
 import sqlite3
 import operator
 import textwrap
+import tempfile
 import itertools
 import functools
 import subprocess
@@ -20,7 +21,7 @@ import bottle
 
 import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, \
-                  sizeof_fmt, parse_fail_arch, Pager
+                  sizeof_fmt, parse_fail_arch, Pager, FileRemover
 
 __version__ = '1.8'
 
@@ -896,12 +897,35 @@ def cleanmirror(repo, db):
     bottle.response.content_type = 'text/plain; charset=UTF-8'
     return render('cleanmirror.txt', repo=repo, packages=debs)
 
+file_remover = FileRemover()
+
 @app.route('/data/<filename>')
 def data_dl(db, filename):
     if not (filename.endswith('.db') or filename.endswith('.fossil')):
         bottle.abort(404, "Not found: '/data/%s'" % filename)
-    mime = 'application/x-sqlite3; charset=binary'
-    return bottle.static_file(filename, root='data', mimetype=mime, download=filename)
+    origfile = 'data/' + filename
+    con = sqlite3.connect(origfile)
+    fd, bckfile = tempfile.mkstemp(prefix='dl-', suffix='.db')
+    os.close(fd)
+    proc = subprocess.run(
+        ('sqlite3', origfile, '.backup ' + bckfile), check=True)
+
+    headers = dict()
+    headers['Content-Type'] = 'application/x-sqlite3; charset=binary'
+    headers['Content-Disposition'] = 'attachment; filename="%s"' % filename
+    stats = os.stat(origfile)
+    headers['Content-Length'] = clen = stats.st_size
+    lm = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(stats.st_mtime))
+    headers['Last-Modified'] = lm
+    headers['Date'] = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
+
+    if bottle.request.method == 'HEAD':
+        os.unlink(bckfile)
+        return bottle.HTTPResponse('', **headers)
+    else:
+        body = open(bckfile, 'rb')
+        file_remover.cleanup_once_done(body, bckfile)
+        return bottle.HTTPResponse(body, **headers)
 
 @app.route('/api_version')
 def api_version(db):
