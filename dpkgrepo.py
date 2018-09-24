@@ -320,13 +320,14 @@ SELECT c1.repo repo, pkgcount, ghost, lagging, missing
 FROM (
 SELECT
   dpkg_repos.name repo, dpkg_repos.realname reponame,
+  dpkg_repos.testing testing, dpkg_repos.category category,
   count(packages.name) pkgcount,
   (CASE WHEN count(packages.name)
    THEN sum(CASE WHEN packages.name IS NULL THEN 1 ELSE 0 END)
    ELSE 0 END) ghost
 FROM dpkg_repos
 LEFT JOIN (
-    SELECT DISTINCT dp.package package, dp.repo repo, dr.realname reponame
+    SELECT DISTINCT dp.package, dp.repo, dr.realname reponame, dr.architecture
     FROM dpkg_packages dp
     LEFT JOIN dpkg_repos dr ON dr.name=dp.repo
   ) dpkg
@@ -335,14 +336,13 @@ LEFT JOIN packages
   ON packages.name = dpkg.package
 LEFT JOIN package_spec spabhost
   ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
-WHERE ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch'))
+WHERE ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
 GROUP BY dpkg_repos.name
 ) c1
 LEFT JOIN (
 SELECT
-  dpkg.repo repo,
-  sum(pkgver.fullver > dpkg.version COLLATE vercomp) lagging,
-  sum(CASE WHEN dpkg.version IS NULL THEN 1 ELSE 0 END) missing
+  dpkg.repo repo, dpkg.reponame reponame,
+  sum(pkgver.fullver > dpkg.version COLLATE vercomp) lagging
 FROM packages
 INNER JOIN (
     SELECT
@@ -358,22 +358,40 @@ LEFT JOIN package_spec spabhost
   ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
 LEFT JOIN (
     SELECT
-      dp_d.package package, dr.realname repo, max(dp.version COLLATE vercomp) version, dr.category category
-    FROM (SELECT DISTINCT name package FROM packages) dp_d
-    LEFT JOIN (SELECT DISTINCT name FROM dpkg_repos) dr_d
-    LEFT JOIN dpkg_packages dp ON dp.package=dp_d.package AND dp.repo=dr_d.name
-    LEFT JOIN dpkg_repos dr ON dr.name=dr_d.name
-    GROUP BY dp_d.package, dr.realname
-  ) dpkg
-  ON dpkg.package = packages.name
+      dp_d.name package, dr.name repo, dr.realname reponame,
+      max(dp.version COLLATE vercomp) version, dr.category category,
+      dr.architecture architecture
+    FROM packages dp_d
+    INNER JOIN dpkg_repos dr
+    LEFT JOIN dpkg_packages dp ON dp.package=dp_d.name AND dp.repo=dr.name
+    GROUP BY dp_d.name, dr.name
+  ) dpkg ON dpkg.package = packages.name
 WHERE pkgver.branch = trees.mainbranch
-  AND ((spabhost.value IS 'noarch') = (dpkg.repo IS 'noarch'))
+  AND ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
   AND dpkg.repo IS NOT null
   AND (dpkg.version IS NOT null OR (dpkg.category='bsp') = (trees.category='bsp'))
 GROUP BY dpkg.repo
-) c2
-ON c2.repo=c1.repo
-ORDER BY c1.reponame, c1.repo
+) c2 ON c2.repo=c1.repo
+LEFT JOIN (
+SELECT reponame, sum(CASE WHEN dpp IS NULL THEN 1 ELSE 0 END) missing
+FROM (
+  SELECT
+    packages.name package, dr.realname reponame, dr.category category,
+    dp.package dpp
+  FROM packages
+  INNER JOIN dpkg_repos dr
+  LEFT JOIN trees ON trees.name = packages.tree
+  LEFT JOIN package_spec spabhost
+    ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
+  LEFT JOIN dpkg_packages dp ON dp.package=packages.name AND dp.repo=dr.name
+  WHERE ((spabhost.value IS 'noarch') = (dr.architecture IS 'noarch'))
+  AND dr.category != 'overlay'
+  AND (dp.package IS NOT null OR (dr.category='bsp') = (trees.category='bsp'))
+  GROUP BY packages.name, dr.realname
+)
+GROUP BY reponame
+) c3 ON c3.reponame=c1.reponame AND c1.testing=0
+ORDER BY c1.category, c1.reponame, c1.testing
 '''
 
 def stats_update(db):
