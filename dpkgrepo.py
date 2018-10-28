@@ -159,7 +159,8 @@ def init_db(db):
     cur.execute("CREATE VIEW IF NOT EXISTS v_dpkg_packages_new AS "
                 "SELECT dp.package package, "
                 "  max(version COLLATE vercomp) dpkg_version, "
-                "  dp.repo repo, dr.realname reponame "
+                "  dp.repo repo, dr.realname reponame, "
+                "  dr.architecture architecture "
                 "FROM dpkg_packages dp "
                 "LEFT JOIN dpkg_repos dr ON dr.name=dp.repo "
                 "GROUP BY package, repo")

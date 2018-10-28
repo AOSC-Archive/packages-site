@@ -112,7 +112,7 @@ LEFT JOIN package_spec spabhost
 LEFT JOIN v_dpkg_packages_new dpkg
   ON dpkg.package = p.name
 WHERE dpkg.repo = ?
-  AND ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch'))
+  AND ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
 ORDER BY p.name
 '''
 
@@ -145,10 +145,10 @@ LEFT JOIN package_spec spabhost
   ON spabhost.package = v_packages.name AND spabhost.key = 'ABHOST'
 LEFT JOIN v_dpkg_packages_new dpkg
   ON dpkg.package = v_packages.name
-WHERE dpkg.reponame = ? AND
+WHERE dpkg.repo = ? AND
   dpkg_version IS NOT null AND
-  (dpkg.reponame IS 'noarch' OR ? != 'noarch') AND
-  ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch'))
+  (dpkg.architecture IS 'noarch' OR ? != 'noarch') AND
+  ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
 GROUP BY name
 HAVING (max(dpkg_version COLLATE vercomp) < full_version COLLATE vercomp)
 ORDER BY name
@@ -272,11 +272,12 @@ LEFT JOIN package_spec spabhost
   ON spabhost.package = dp.package AND spabhost.key = 'ABHOST'
 LEFT JOIN (
     SELECT
-      package,
-      group_concat(version) versions
-    FROM dpkg_packages
-    WHERE repo = 'noarch'
-    GROUP BY package
+      dp.package,
+      group_concat(dp.version) versions
+    FROM dpkg_packages dp
+    INNER JOIN dpkg_repos dr ON dr.name=dp.repo
+    WHERE dr.architecture = 'noarch'
+    GROUP BY dp.package
   ) dpnoarch
   ON dpnoarch.package = dp.package
 WHERE repo = ?
@@ -299,11 +300,12 @@ LEFT JOIN package_spec spabhost
   ON spabhost.package = dp.package AND spabhost.key = 'ABHOST'
 LEFT JOIN (
     SELECT
-      package,
-      group_concat(version) versions
-    FROM dpkg_packages
-    WHERE repo != 'noarch'
-    GROUP BY package
+      dp.package,
+      group_concat(dp.version) versions
+    FROM dpkg_packages dp
+    INNER JOIN dpkg_repos dr ON dr.name=dp.repo
+    WHERE dr.architecture != 'noarch'
+    GROUP BY dp.package
   ) dparch
   ON dparch.package = dp.package
 WHERE repo = ?
@@ -381,7 +383,8 @@ application = app = bottle.Bottle()
 plugin = bottle_sqlite.Plugin(
     dbfile='data/abbs.db',
     readonly=True,
-    collations={'vercomp': version_compare}
+    extensions=('./mod_vercomp.so',)
+    # collations={'vercomp': version_compare}
 )
 app.install(plugin)
 
