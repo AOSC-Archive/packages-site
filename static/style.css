@@ -255,7 +255,7 @@ tr {
   background-color: aliceblue;
 }
 .repo-name-testing::before {
-  content: '└';
+  content: '• ';
 }
 .sql-special {
   font-style: italic;

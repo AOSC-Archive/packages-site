@@ -94,7 +94,7 @@ ORDER BY mtime DESC, rid DESC
 
 SQL_GET_PACKAGE_DPKG = '''
 SELECT
-  version, architecture, repo, dr.realname reponame,
+  version, dp.architecture, repo, dr.realname reponame,
   dr.testing testing, filename, size
 FROM dpkg_packages dp
 LEFT JOIN dpkg_repos dr ON dr.name=dp.repo
@@ -222,7 +222,7 @@ ORDER BY name
 
 SQL_GET_REPO_COUNT = '''
 SELECT
-  drs.repo name, dr.realname realname, dr.path path,
+  drs.repo name, dr.realname realname, dr.suite branch, dr.path path,
   dr.date date, dr.testing testing, dr.category category,
   coalesce(drs.packagecnt, 0) pkgcount,
   coalesce(drs.ghostcnt, 0) ghost,
@@ -588,6 +588,7 @@ def query(db):
 
 @app.route('/packages/<name>')
 def package(name, db):
+    name = name.strip().lower()
     res = db.execute(SQL_GET_PACKAGE_INFO, (name,)).fetchone()
     pkgintree = True
     if res is None:

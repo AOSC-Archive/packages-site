@@ -46,10 +46,13 @@
   </tr>
 {%- endif %}
 {% for repo in repos -%}
+{% if not repo['testing'] or repo['pkgcount'] -%}
   <tr class="repo-row{{ ' repo-testing' if repo['testing'] else '' }}">
-    <td class="repo-name{{ ' repo-name-testing' if repo['testing'] else '' }}">
-      {{ 'testing' if repo['testing'] else repo['name'] }}
-    </td>
+    {% if repo['testing'] -%}
+    <td class="repo-name repo-name-testing">{{ repo['branch'] }}</td>
+    {%- else -%}
+    <td class="repo-name">{{ repo['realname'] }}</td>
+    {%- endif %}
     <td>
     <span class="repo-pkgcount tab">
       <a href="/repo/{{ repo['name'] }}" class="num">{{ repo['pkgcount'] }}</a>
@@ -57,10 +60,10 @@
     <span class="repo-ghost tab">
       <a href="/ghost/{{ repo['name'] }}" class="num">{{ repo['ghost'] }}</a>
     </span>
-    {% if not repo['testing'] -%}
     <span class="repo-lagging tab">
       <a href="/lagging/{{ repo['name'] }}" class="num">{{ repo['lagging'] }}</a>
     </span>
+    {% if not repo['testing'] -%}
     <span class="repo-missing tab">
       <a href="/missing/{{ repo['name'] }}" class="num">{{ repo['missing'] }}</a>
     </span>
@@ -70,6 +73,7 @@
       <time datetime="{{ repo['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ repo['date']|strftime('%Y-%m-%d %H:%M') }}</time>
     </td>
   </tr>
+{%- endif %}
 {%- endfor %}
 {%- endfor %}
   <tr>
