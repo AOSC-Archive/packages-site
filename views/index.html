@@ -63,7 +63,7 @@
     <span class="repo-lagging tab">
       <a href="/lagging/{{ repo['name'] }}" class="num">{{ repo['lagging'] }}</a>
     </span>
-    {% if not repo['testing'] -%}
+    {% if not repo['testing'] and not repo['category'] == "overlay" -%}
     <span class="repo-missing tab">
       <a href="/missing/{{ repo['name'] }}" class="num">{{ repo['missing'] }}</a>
     </span>

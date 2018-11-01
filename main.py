@@ -553,11 +553,12 @@ def search(db):
     if not q:
         return render('search.html', q=q, packages=[], page=pagination(None))
     if not noredir:
-        row = db.execute("SELECT 1 FROM packages WHERE name=?", (q,)).fetchone()
+        qn = q.strip().lower().replace(' ', '-').replace('_', '-')
+        row = db.execute("SELECT 1 FROM packages WHERE name=?", (qn,)).fetchone()
         if not row:
-            row = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (q,)).fetchone()
+            row = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (qn,)).fetchone()
         if row:
-            bottle.redirect("/packages/" + q)
+            bottle.redirect("/packages/" + qn)
     packages = []
     qesc = RE_FTS5_COLSPEC.sub(r'"\1"', q)
     try:
