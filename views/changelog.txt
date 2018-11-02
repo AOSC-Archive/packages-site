@@ -1,8 +1,8 @@
 {% for ch in changes -%}
-{{ name }} ({{ ch.fullver|d('?') }}) testing; urgency=medium
+{{ name }} ({{ ch.fullver|d('?', true) }}) testing; urgency=medium
 
   [{% if ch.githash %}{{ ch.githash[:10] }}{% else %}??????????{% endif %}] {{ ch.message|fill(78, subsequent_indent='  ') }}
 
- -- {{ ch.fullname|d('unknown') }} <{{ ch.email }}>  {{ ch.time|strftime('%a, %d %b %Y %H:%M:%S +0000') }}
+ -- {{ ch.fullname|d('unknown', true) }} <{{ ch.email }}>  {{ ch.time|strftime('%a, %d %b %Y %H:%M:%S +0000') }}
 
 {% endfor %}
