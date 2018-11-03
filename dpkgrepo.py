@@ -337,7 +337,8 @@ LEFT JOIN packages
   ON packages.name = dpkg.package
 LEFT JOIN package_spec spabhost
   ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
-WHERE ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
+WHERE packages.name IS NULL
+OR ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
 GROUP BY dpkg_repos.name
 ) c1
 LEFT JOIN (
@@ -349,8 +350,8 @@ INNER JOIN (
     SELECT
       package, branch,
       ((CASE WHEN ifnull(epoch, '') = '' THEN '' ELSE epoch || ':' END) ||
-       version || (CASE WHEN ifnull(release, '') = '' THEN '' ELSE '-' ||
-       release END)) fullver
+       version || (CASE WHEN ifnull(release, '') IN ('', '0') THEN '' ELSE '-'
+       || release END)) fullver
     FROM package_versions
   ) pkgver
   ON pkgver.package = packages.name

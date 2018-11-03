@@ -80,7 +80,7 @@ SELECT version, updated, url FROM piss.v_package_upstream WHERE package=?
 SQL_GET_PACKAGE_CHANGELOG = '''
 SELECT
   ((CASE WHEN ifnull(epoch, '') = '' THEN '' ELSE epoch || ':' END) ||
-   version || (CASE WHEN ifnull(release, '') = '' THEN '' ELSE '-' ||
+   version || (CASE WHEN ifnull(release, '') IN ('', '0') THEN '' ELSE '-' ||
    release END)) fullver, pr.rid rid, m.githash githash,
   round((ev.mtime-2440587.5)*86400) time,
   ev.user email, cm.name fullname, pr.message message
@@ -713,8 +713,8 @@ def lagging(repo, db):
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
     reponame = repos[repo]['realname']
-    res = Pager(db.execute(
-                SQL_GET_PACKAGE_LAGGING, (reponame, reponame)), pagesize, page)
+    res = Pager(db.execute(SQL_GET_PACKAGE_LAGGING,
+                (repo, reponame)), pagesize, page)
     for row in res:
         packages.append(dict(row))
     if packages:

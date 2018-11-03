@@ -9,10 +9,10 @@ URLBASE = 'http://127.0.0.1:8082'
 class TestReportNum(unittest.TestCase):
 
     def setUp(self):
-        self.session = requests.Session()
+        self.maxDiff = None
 
     def test_listnumber(self):
-        req = self.session.get(URLBASE + '/?type=json')
+        req = requests.get(URLBASE + '/?type=json')
         req.raise_for_status()
         d = req.json()
         repo_nums = {}
@@ -23,17 +23,21 @@ class TestReportNum(unittest.TestCase):
                     row['pkgcount'], row['ghost'],
                     row['lagging'], None if testing else row['missing']
                 )
+        fails = []
         for rn, row in repo_nums.items():
             for (name, num) in zip(('repo', 'ghost', 'lagging', 'missing'), row):
                 if num is None:
                     continue
-                req = self.session.get('%s/%s/%s?type=json' % (URLBASE, name, rn))
+                req = requests.get('%s/%s/%s?type=json' % (URLBASE, name, rn))
                 req.raise_for_status()
                 d = req.json()
                 if 'error' in d:
-                    continue
-                self.assertEqual(num, d['page']['count'],
-                    "%s %s: stat %d, list %d" % (rn, name, num, d['page']['count']))
+                    realnum = 0
+                else:
+                    realnum = d['page']['count']
+                if num != realnum:
+                    fails.append((rn, name, num, realnum))
+        self.assertListEqual([], fails, msg='rn, name, stat, list')
 
 if __name__ == '__main__':
     unittest.main()
