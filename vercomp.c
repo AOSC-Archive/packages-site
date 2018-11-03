@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
 
@@ -18,7 +19,7 @@ typedef struct dpkg_version {
 } dpkg_version_t;
 
 static dpkg_version_t parse_version(char *string) {
-    dpkg_version_t version = {0, "", ""};
+    dpkg_version_t version = {0, "", "0"};
     char *colon, *hyphen;
     colon = strchr(string, ':');
     if (colon) {
@@ -48,7 +49,7 @@ static int order(int c) {
     }
 }
 
-int version_compare(const char *a, const char *b) {
+static int version_compare(const char *a, const char *b) {
     while (*a || *b) {
         int first_diff = 0;
 
@@ -83,18 +84,9 @@ int version_compare(const char *a, const char *b) {
     return 0;
 }
 
-static int vercomp_collation(
-    void *pArg, int nSa, const void *bSa, int nSb, const void *bSb
-){
-    char *svera, *sverb;
+static int dpkg_version_compare(char *svera, char *sverb){
     dpkg_version_t vera, verb;
     int comp;
-    UNUSED(pArg);
-    svera = (char *)malloc(nSa + 1);
-    sverb = (char *)malloc(nSb + 1);
-    svera[nSa] = sverb[nSb] = 0;
-    memcpy(svera, bSa, nSa);
-    memcpy(sverb, bSb, nSb);
     vera = parse_version(svera);
     verb = parse_version(sverb);
 
@@ -105,9 +97,29 @@ static int vercomp_collation(
     }
     comp = version_compare(vera.version, verb.version);
     if (comp) return comp;
-    comp = version_compare(vera.revision, verb.revision);
-    if (comp) return comp;
-    return strcmp(svera, sverb);
+    return version_compare(vera.revision, verb.revision);
+}
+
+static int vercomp_collation(
+    void *pArg, int nSa, const void *bSa, int nSb, const void *bSb
+){
+    char *svera, *sverb;
+    int comp;
+    UNUSED(pArg);
+    svera = (char *)malloc(nSa + 1);
+    sverb = (char *)malloc(nSb + 1);
+    svera[nSa] = sverb[nSb] = 0;
+    memcpy(svera, bSa, nSa);
+    memcpy(sverb, bSb, nSb);
+    comp = dpkg_version_compare(svera, sverb);
+    if (comp == 0) {
+        memcpy(svera, bSa, nSa);
+        memcpy(sverb, bSb, nSb);
+        comp = strcmp(svera, sverb);
+    }
+    free(svera);
+    free(sverb);
+    return comp;
 }
 
 #ifdef _WIN32

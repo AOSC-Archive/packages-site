@@ -1,5 +1,5 @@
-CC = gcc-8
+CC = gcc
 CFLAGS = -fPIC -shared -O2 -Wall -Wextra
 
-libsqlitefunctions.so:
+mod_vercomp.so:
 	$(CC) $(CFLAGS) vercomp.c -o mod_vercomp.so
