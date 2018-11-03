@@ -16,6 +16,7 @@ class TestReportNum(unittest.TestCase):
         req.raise_for_status()
         d = req.json()
         repo_nums = {}
+        tree_nums = {}
         for _, cat in d['repo_categories']:
             for row in cat:
                 repo_nums[row['name']] = (
@@ -23,6 +24,8 @@ class TestReportNum(unittest.TestCase):
                     (None if row['testing'] or row['category'] == 'overlay'
                      else row['missing'])
                 )
+        for row in d['source_trees']:
+            tree_nums[row['name']] = (row['pkgcount'], row['srcupd'])
         fails = []
         for rn, row in repo_nums.items():
             for (name, num) in zip(('repo', 'ghost', 'lagging', 'missing'), row):
@@ -37,7 +40,22 @@ class TestReportNum(unittest.TestCase):
                     realnum = d['page']['count']
                 if num != realnum:
                     fails.append((rn, name, num, realnum))
+        for rn, row in tree_nums.items():
+            for (name, num) in zip(('tree', 'srcupd'), row):
+                req = requests.get('%s/%s/%s?type=json' % (URLBASE, name, rn))
+                req.raise_for_status()
+                d = req.json()
+                if 'error' in d:
+                    realnum = 0
+                else:
+                    realnum = d['page']['count']
+                if num != realnum:
+                    fails.append((rn, name, num, realnum))
         self.assertListEqual([], fails, msg='rn, name, stat, list')
+        req = requests.get(URLBASE + '/updates?type=json')
+        req.raise_for_status()
+        d = req.json()
+        self.assertEqual(len(d['packages']), 100)
 
 if __name__ == '__main__':
     unittest.main()

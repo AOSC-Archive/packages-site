@@ -99,7 +99,7 @@ SELECT
 FROM dpkg_packages dp
 LEFT JOIN dpkg_repos dr ON dr.name=dp.repo
 WHERE package = ?
-ORDER BY dr.realname ASC, version COLLATE vercomp DESC
+ORDER BY dr.realname ASC, version COLLATE vercomp DESC, testing DESC
 '''
 
 SQL_GET_PACKAGE_REPO = '''
