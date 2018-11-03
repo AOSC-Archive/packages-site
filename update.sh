@@ -3,6 +3,7 @@ REPOS="aosc-os-core aosc-os-abbs aosc-os-arm-bsps"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ABBS_META="$DIR/../abbs-meta/abbsmeta.py"
 DATA_DIR="data/"
+if [ ! -d "$DATA_DIR" ]; then mkdir -p "$DATA_DIR"; fi
 cd "$DATA_DIR"
 if [ ! -f .gitkeep ]; then touch .gitkeep; fi
 for repo in $REPOS; do
