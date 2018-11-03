@@ -254,6 +254,9 @@ tr {
 .repo-testing, .dpkg-testing {
   background-color: aliceblue;
 }
+.repo-explosive, .dpkg-explosive {
+  background-color: seashell;
+}
 .repo-name-testing::before {
   content: '• ';
 }

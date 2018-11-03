@@ -4,6 +4,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ABBS_META="$DIR/../abbs-meta/abbsmeta.py"
 DATA_DIR="data/"
 cd "$DATA_DIR"
+if [ ! -f .gitkeep ]; then touch .gitkeep; fi
 for repo in $REPOS; do
     if [ ! -d $repo.git ]; then
         git clone --mirror https://github.com/AOSC-Dev/$repo.git
