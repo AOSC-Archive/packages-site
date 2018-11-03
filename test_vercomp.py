@@ -25,6 +25,8 @@ class TestVercomp(unittest.TestCase):
         self._test_comparison('1.2', '<', '1.11')
         self._test_comparison('1.0-0.1', '<', '1.1')
         self._test_comparison('1.0-0.1', '<', '1.0-1')
+        # make them different for sorting
+        self._test_comparison('1:1.0-0', '>', '1:1.0')
         self._test_comparison('1.0', '==', '1.0')
         self._test_comparison('1.0-0.1', '==', '1.0-0.1')
         self._test_comparison('1:1.0-0.1', '==', '1:1.0-0.1')

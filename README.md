@@ -9,6 +9,8 @@ For more information, see: https://wiki.aosc.io/developers/packages-site
 git clone https://github.com/AOSC-Dev/abbs-meta.git
 git clone https://github.com/AOSC-Dev/packages-site.git
 cd packages-site
+sudo apt install libsqlite3-dev
+make
 pip3 install -r requirements.txt
 bash ./update.sh
 ```
