@@ -18,10 +18,10 @@ class TestReportNum(unittest.TestCase):
         repo_nums = {}
         for _, cat in d['repo_categories']:
             for row in cat:
-                testing = row['testing']
                 repo_nums[row['name']] = (
-                    row['pkgcount'], row['ghost'],
-                    row['lagging'], None if testing else row['missing']
+                    row['pkgcount'], row['ghost'], row['lagging'],
+                    (None if row['testing'] or row['category'] == 'overlay'
+                     else row['missing'])
                 )
         fails = []
         for rn, row in repo_nums.items():

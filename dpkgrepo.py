@@ -355,7 +355,7 @@ INNER JOIN (
     FROM package_versions
   ) pkgver
   ON pkgver.package = packages.name
-LEFT JOIN trees ON trees.name = packages.tree
+INNER JOIN trees ON trees.name = packages.tree
 LEFT JOIN package_spec spabhost
   ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
 LEFT JOIN (
@@ -379,10 +379,13 @@ SELECT reponame, sum(CASE WHEN dpp IS NULL THEN 1 ELSE 0 END) missing
 FROM (
   SELECT
     packages.name package, dr.realname reponame, dr.category category,
-    dp.package dpp
+    max(dp.package) dpp
   FROM packages
   INNER JOIN dpkg_repos dr
-  LEFT JOIN trees ON trees.name = packages.tree
+  INNER JOIN trees ON trees.name = packages.tree
+  INNER JOIN package_versions pv
+    ON pv.package=packages.name AND pv.branch=trees.mainbranch
+    AND pv.version IS NOT NULL
   LEFT JOIN package_spec spabhost
     ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
   LEFT JOIN dpkg_packages dp ON dp.package=packages.name AND dp.repo=dr.name

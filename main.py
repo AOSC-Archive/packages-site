@@ -222,8 +222,8 @@ ORDER BY name
 
 SQL_GET_REPO_COUNT = '''
 SELECT
-  drs.repo name, dr.realname realname, dr.suite branch, dr.path path,
-  dr.date date, dr.testing testing, dr.category category,
+  drs.repo name, dr.realname realname, dr.architecture, dr.suite branch,
+  dr.path path, dr.date date, dr.testing testing, dr.category category,
   coalesce(drs.packagecnt, 0) pkgcount,
   coalesce(drs.ghostcnt, 0) ghost,
   coalesce(drs.laggingcnt, 0) lagging,
@@ -249,7 +249,7 @@ FROM (
     (CASE WHEN vpu.version LIKE (p.version || '%') THEN 0 ELSE
      p.version < vpu.version COLLATE vercomp END) ver_compare
   FROM v_packages p
-  LEFT JOIN trees t ON t.name=p.tree
+  INNER JOIN trees t ON t.name=p.tree
   LEFT JOIN piss.v_package_upstream vpu ON vpu.package=p.name
 ) q1
 GROUP BY tree
@@ -712,9 +712,9 @@ def lagging(repo, db):
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
-    reponame = repos[repo]['realname']
+    arch = repos[repo]['architecture']
     res = Pager(db.execute(SQL_GET_PACKAGE_LAGGING,
-                (repo, reponame)), pagesize, page)
+                (repo, arch)), pagesize, page)
     for row in res:
         packages.append(dict(row))
     if packages:
@@ -768,8 +768,9 @@ def missing(repo, db):
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
     reponame = repos[repo]['realname']
+    arch = repos[repo]['architecture']
     res = Pager(db.execute(SQL_GET_PACKAGE_MISSING,
-                (reponame, reponame, reponame)), pagesize, page)
+                (reponame, arch, reponame)), pagesize, page)
     for row in res:
         packages.append(dict(row))
     if packages:
