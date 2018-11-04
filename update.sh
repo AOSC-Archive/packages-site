@@ -4,7 +4,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ABBS_META="$DIR/../abbs-meta/abbsmeta.py"
 DATA_DIR="data/"
 if [ ! -d "$DATA_DIR" ]; then mkdir -p "$DATA_DIR"; fi
-cd "$DATA_DIR"
+pushd "$DATA_DIR"
 if [ ! -f .gitkeep ]; then touch .gitkeep; fi
 for repo in $REPOS; do
     if [ ! -d $repo.git ]; then
@@ -21,6 +21,7 @@ python3 $ABBS_META -p . -m . -d abbs.db -b explosive,stable,testing -B explosive
     -c base -u 'https://github.com/AOSC-Dev/aosc-os-abbs' -P 1 aosc-os-abbs
 python3 $ABBS_META -p . -m . -d abbs.db -b master -B master \
     -c bsp -u 'https://github.com/AOSC-Dev/aosc-os-arm-bsps' -P 2 aosc-os-arm-bsps
-cd "$DIR"
+pushd "$DIR"
 if [ ! -f mod_vercomp.so ]; then make mod_vercomp.so; fi
+popd
 python3 "$DIR/dpkgrepo.py" abbs.db
