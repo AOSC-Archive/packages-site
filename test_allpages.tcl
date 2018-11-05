@@ -46,7 +46,7 @@ while {$testpath ne ""} {
         continue
     }
     set data [::http::data $token]
-    set doc [dom parse -html5 -ignorexmlns $data]
+    set doc [dom parse -html $data]
     foreach tag [domDoc $doc getElementsByTagName a] {
         set href [domNode $tag getAttribute href {}]
         set href [::uri::resolve $urlhost$testpath $href]
