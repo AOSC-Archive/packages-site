@@ -29,7 +29,7 @@
 {% if pkg['hasrevdep'] -%}
 <a href="/revdep/{{ pkg['name']|urlencode }}">Reverse dependency</a>,
 {%- endif %}
-<a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/issues/new?title={{ pkg['name']|urlencode }}%3A%20">Report issues</a></p>
+<a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/issues/new?template=bug-report.md&title={{ pkg['name']|urlencode }}%3A%20">Report issues</a></p>
 {% if pkg['srctype'] -%}
 <p><b class="pkg-field" title="auto detected">Upstream</b>:
 {% if 'srcurl_base' in pkg -%}
@@ -63,8 +63,10 @@
     <td>{{ row[0] }}</td>
     {% for col in row[1] -%}
       {% if col -%}
-      {% if col['testing'] -%}
+      {% if col['testing'] == 1 -%}
       <td class="dpkg dpkg-testing" title="testing">
+      {%- elif col['testing'] == 2 -%}
+      <td class="dpkg dpkg-explosive" title="explosive">
       {%- else -%}<td class="dpkg">{%- endif %}
         <a href="https://repo.aosc.io/{{ repos[col['repo']]['path'] }}/{{ col['filename'] }}">
           {{ col['size']|sizeof_fmt }}

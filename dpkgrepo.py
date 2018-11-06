@@ -36,58 +36,79 @@ from utils import version_compare
 logging.basicConfig(
     format='%(asctime)s %(levelname).1s %(message)s', level=logging.INFO)
 
-Repo = collections.namedtuple('Repo', 'name realname path source_tree category testing')
+# base (list all arch)
+#  - amd64
+#    - stable
+#    - testing
+#    - explosive
+#  - arm64
+#  - ...
+#  - noarch
+# overlay (list avail arch)
+#  - bsp-sunxi
+#    - arm64
+#      - stable
+#      - testing
+#      - explosive
+#    - armel
+#  - opt-avx2
+#    - amd64
+
+Repo = collections.namedtuple('Repo', (
+    'name',     # primary key
+    'realname', # overlay-arch, group key
+    'source_tree',  # git source
+    'category', # base, bsp, overlay
+    'testing',  # 0-2, testing level
+    'suite',        # deb source suite/distribution, git branch
+    'component',    # deb source component
+    'architecture', # deb source architecture
+))
 
 # we don't have gpg, must be https
 MIRROR = os.environ.get('REPO_MIRROR', 'https://repo.aosc.io/')
-REPOS = (
-    Repo('amd64', 'amd64', 'os-amd64/os3-dpkg', None, 'base', 0),
-    Repo('amd64/testing', 'amd64',
-        'os-amd64/testing/os-amd64/os3-dpkg', None, 'base', 1),
-    Repo('arm64', 'arm64', 'os-arm64/os3-dpkg', None, 'base', 0),
-    Repo('arm64/testing', 'arm64',
-        'os-arm64/testing/os-arm64/os3-dpkg', None, 'base', 1),
-    Repo('arm64-sunxi', 'arm64-sunxi',
-        'os-arm64/sunxi/os3-dpkg', 'aosc-os-arm-bsps', 'bsp', 0),
-    Repo('arm64-sunxi/testing', 'arm64-sunxi',
-        'os-arm64/sunxi/testing/os-arm64/os3-dpkg', 'aosc-os-arm-bsps', 'bsp', 1),
-    Repo('armel', 'armel', 'os-armel/os3-dpkg', None, 'base', 0),
-    Repo('armel/testing', 'armel',
-        'os-armel/testing/os-armel/os3-dpkg', None, 'base', 1),
-    Repo('armel-sunxi', 'armel-sunxi',
-        'os-armel/sunxi/os3-dpkg', 'aosc-os-arm-bsps', 'bsp', 0),
-    Repo('armel-sunxi/testing', 'armel-sunxi',
-        'os-armel/sunxi/testing/os-armel/os3-dpkg', 'aosc-os-arm-bsps', 'bsp', 1),
-    Repo('noarch', 'noarch', 'os-noarch/os3-dpkg', None, 'base', 0),
-    Repo('noarch/testing', 'noarch',
-        'os-noarch/testing/os-noarch/os3-dpkg', None, 'base', 1),
-    Repo('powerpc', 'powerpc', 'os-powerpc/os3-dpkg', None, 'base', 0),
-    Repo('powerpc/testing', 'powerpc',
-        'os-powerpc/testing/os-powerpc/os3-dpkg', None, 'base', 1),
-    Repo('ppc64', 'ppc64', 'os-ppc64/os3-dpkg', None, 'base', 0),
-    Repo('ppc64/testing', 'ppc64',
-        'os-ppc64/testing/os-ppc64/os3-dpkg', None, 'base', 1),
-    Repo('riscv64', 'riscv64', 'os-riscv64/os3-dpkg', None, 'base', 0),
-    Repo('riscv64/testing', 'riscv64',
-        'os-riscv64/testing/os-riscv64/os3-dpkg', None, 'base', 1)
-)
+REPOPATH = 'debs'
 
-def init_db(cur):
+ARCHS = ('amd64', 'arm64', 'armel', 'powerpc', 'ppc64', 'riscv64', 'noarch')
+BRANCHES = ('stable', 'testing', 'explosive')
+OVERLAYS = (
+    # dpkg_repos.category, component, source, arch
+    ('base', 'main', None, ARCHS),
+    ('bsp', 'bsp-sunxi', 'aosc-os-arm-bsps', ('armel', 'arm64', 'noarch')),
+    ('overlay', 'opt-avx2', None, ('amd64',)),
+    ('overlay', 'opt-g4', None, ('powerpc',)),
+)
+REPOS = collections.OrderedDict((k, []) for k in BRANCHES)
+for category, component, source, archs in OVERLAYS:
+    for arch in archs:
+        for testlvl, branch in enumerate(BRANCHES):
+            if category == 'base':
+                realname = arch
+            else:
+                realname = '%s-%s' % (component, arch)
+            REPOS[branch].append(Repo(
+                realname + '/' + branch, realname,
+                source, category, testlvl, branch, component, arch
+            ))
+
+
+def init_db(db):
+    cur = db.cursor()
     cur.execute('CREATE TABLE IF NOT EXISTS dpkg_repos ('
-                'name TEXT PRIMARY KEY,' # amd64/testing
-                'realname TEXT,'    # amd64
+                'name TEXT PRIMARY KEY,' # key: bsp-sunxi-armel/testing
+                'realname TEXT,'    # group key: amd64, bsp-sunxi-armel
                 'path TEXT,'
                 'source_tree TEXT,' # abbs tree
                 'category TEXT,' # base, bsp, overlay
-                'testing INTEGER,' # 0, 1
+                'testing INTEGER,'    # 0, 1, 2
+                'suite TEXT,'         # stable, testing, explosive
+                'component TEXT,'     # main, bsp-sunxi, opt-avx2
+                'architecture TEXT,'  # amd64, all
                 'origin TEXT,'
                 'label TEXT,'
-                'suite TEXT,'
                 'codename TEXT,'
                 'date INTEGER,'
                 'valid_until INTEGER,'
-                'architectures TEXT,'
-                'components TEXT,'
                 'description TEXT'
                 ')')
     cur.execute('CREATE TABLE IF NOT EXISTS dpkg_packages ('
@@ -138,7 +159,8 @@ def init_db(cur):
     cur.execute("CREATE VIEW IF NOT EXISTS v_dpkg_packages_new AS "
                 "SELECT dp.package package, "
                 "  max(version COLLATE vercomp) dpkg_version, "
-                "  dp.repo repo, dr.realname reponame "
+                "  dp.repo repo, dr.realname reponame, "
+                "  dr.architecture architecture "
                 "FROM dpkg_packages dp "
                 "LEFT JOIN dpkg_repos dr ON dr.name=dp.repo "
                 "GROUP BY package, repo")
@@ -148,6 +170,8 @@ def init_db(cur):
                 ' ON dpkg_packages (package, repo)')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_package_dependencies'
                 ' ON dpkg_package_dependencies (package)')
+    db.commit()
+    cur.close()
 
 def remove_clearsign(blob):
     clearsign_header = b'-----BEGIN PGP SIGNED MESSAGE-----'
@@ -168,43 +192,66 @@ def remove_clearsign(blob):
                 lines.append(ln)
     return b''.join(lines)
 
-def release_update(cur, repo):
-    url = urllib.parse.urljoin(MIRROR, repo.path.rstrip('/') + '/InRelease')
+def suite_update(db, suite, repos):
+    cur = db.cursor()
+    url = urllib.parse.urljoin(MIRROR, '/'.join((
+        REPOPATH, 'dists', suite, 'InRelease')))
     req = requests.get(url, timeout=120)
     if req.status_code == 404:
-        # testing not available
-        logging.error('dpkg source %s not found' % repo.path)
-        cur.execute('REPLACE INTO dpkg_repos VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)',
-            (repo.name, repo.realname, repo.path, repo.source_tree,
-            repo.category, repo.testing, None, None, None, None, None,
-            None, None, None, None))
-        if repo.testing:
-            cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo = ?', (repo.name,))
-            cur.execute('DELETE FROM dpkg_package_dependencies WHERE repo = ?', (repo.name,))
-            cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo = ?', (repo.name,))
-        return 0, None
+        logging.error('dpkg suite %s not found' % suite)
+        for repo in repos:
+            cur.execute('REPLACE INTO dpkg_repos VALUES '
+                '(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)',
+                (repo.name, repo.realname, REPOPATH, repo.source_tree,
+                repo.category, repo.testing, repo.suite, repo.component,
+                repo.architecture, None, None, None, None, None, None))
+        return {}
     else:
         req.raise_for_status()
     releasetxt = remove_clearsign(req.content).decode('utf-8')
     rel = deb822.Release(releasetxt)
-    cur.execute('REPLACE INTO dpkg_repos VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)', (
-        repo.name, repo.realname, repo.path, repo.source_tree,
-        repo.category, repo.testing,
-        rel.get('Origin'), rel.get('Label'), rel.get('Suite'), rel.get('Codename'),
-        calendar.timegm(parsedate(rel['Date'])) if 'Date' in rel else None,
-        calendar.timegm(parsedate(rel['Valid-Until'])) if 'Valid-Until' in rel else None,
-        rel.get('Architectures'), rel.get('Components'), rel.get('Description')
-    ))
+    pkgrepos = {}
     for item in rel['SHA256']:
-        if item['name'] == 'Packages.xz':
-            return int(item['size']), item['sha256']
+        path = item['name'].split('/')
+        if path[-1] == 'Packages.xz':
+            arch = path[1].split('-')[-1]
+            if arch == 'all':
+                arch = 'noarch'
+            pkgrepos[path[0], arch] = (
+                item['name'], int(item['size']), item['sha256'])
+    rel_date = calendar.timegm(parsedate(rel['Date'])) if 'Date' in rel else None
+    rel_valid = calendar.timegm(parsedate(rel['Valid-Until'])) if 'Valid-Until' in rel else None
+    for repo in repos:
+        pkgrepo = pkgrepos.get((repo.component, repo.architecture))
+        if pkgrepo:
+            pkgpath = '/'.join((REPOPATH, 'dists', suite, pkgrepo[0]))
+            pkgrepos[repo.component, repo.architecture] = (repo, pkgpath) + pkgrepo[1:]
+            cur.execute('REPLACE INTO dpkg_repos VALUES '
+                '(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)', (
+                repo.name, repo.realname, REPOPATH,
+                repo.source_tree, repo.category, repo.testing, repo.suite,
+                repo.component, repo.architecture, rel.get('Origin'),
+                rel.get('Label'), rel.get('Codename'), rel_date, rel_valid,
+                rel.get('Description')
+            ))
+        else:
+            cur.execute('REPLACE INTO dpkg_repos VALUES '
+                '(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)',
+                (repo.name, repo.realname, REPOPATH, repo.source_tree,
+                repo.category, repo.testing, repo.suite, repo.component,
+                repo.architecture, None, None, None, None, None, None))
+    db.commit()
+    cur.close()
+    return pkgrepos
 
 _relationship_fields = ('depends', 'pre-depends', 'recommends',
         'suggests', 'breaks', 'conflicts', 'provides', 'replaces',
         'enhances')
 
-def package_update(cur, repo, size, sha256):
-    url = urllib.parse.urljoin(MIRROR, repo.path.rstrip('/') + '/Packages.xz')
+def package_update(db, repo, path, size, sha256):
+    logging.info(repo.name)
+    cur = db.cursor()
+    url = urllib.parse.urljoin(MIRROR, path)
     req = requests.get(url, timeout=120)
     req.raise_for_status()
     assert len(req.content) == size
@@ -265,6 +312,8 @@ def package_update(cur, repo, size, sha256):
                     ' AND architecture = ? AND repo = ?', pkg)
         cur.execute('DELETE FROM dpkg_package_dependencies WHERE package = ?'
                     ' AND version = ? AND architecture = ? AND repo = ?', pkg)
+    db.commit()
+    cur.close()
 
 SQL_COUNT_REPO = '''
 REPLACE INTO dpkg_repo_stats
@@ -272,13 +321,14 @@ SELECT c1.repo repo, pkgcount, ghost, lagging, missing
 FROM (
 SELECT
   dpkg_repos.name repo, dpkg_repos.realname reponame,
+  dpkg_repos.testing testing, dpkg_repos.category category,
   count(packages.name) pkgcount,
   (CASE WHEN count(packages.name)
    THEN sum(CASE WHEN packages.name IS NULL THEN 1 ELSE 0 END)
    ELSE 0 END) ghost
 FROM dpkg_repos
 LEFT JOIN (
-    SELECT DISTINCT dp.package package, dp.repo repo, dr.realname reponame
+    SELECT DISTINCT dp.package, dp.repo, dr.realname reponame, dr.architecture
     FROM dpkg_packages dp
     LEFT JOIN dpkg_repos dr ON dr.name=dp.repo
   ) dpkg
@@ -287,64 +337,84 @@ LEFT JOIN packages
   ON packages.name = dpkg.package
 LEFT JOIN package_spec spabhost
   ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
-WHERE ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch'))
+WHERE packages.name IS NULL
+OR ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
 GROUP BY dpkg_repos.name
 ) c1
 LEFT JOIN (
 SELECT
-  dpkg.repo repo,
-  sum(pkgver.fullver > dpkg.version COLLATE vercomp) lagging,
-  sum(CASE WHEN dpkg.version IS NULL THEN 1 ELSE 0 END) missing
+  dpkg.repo repo, dpkg.reponame reponame,
+  sum(pkgver.fullver > dpkg.version COLLATE vercomp) lagging
 FROM packages
 INNER JOIN (
     SELECT
       package, branch,
       ((CASE WHEN ifnull(epoch, '') = '' THEN '' ELSE epoch || ':' END) ||
-       version || (CASE WHEN ifnull(release, '') = '' THEN '' ELSE '-' ||
-       release END)) fullver
+       version || (CASE WHEN ifnull(release, '') IN ('', '0') THEN '' ELSE '-'
+       || release END)) fullver
     FROM package_versions
   ) pkgver
   ON pkgver.package = packages.name
-LEFT JOIN trees ON trees.name = packages.tree
+INNER JOIN trees ON trees.name = packages.tree
 LEFT JOIN package_spec spabhost
   ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
 LEFT JOIN (
     SELECT
-      dp_d.package package, dr.realname repo, max(dp.version COLLATE vercomp) version, dr.category category
-    FROM (SELECT DISTINCT name package FROM packages) dp_d
-    LEFT JOIN (SELECT DISTINCT name FROM dpkg_repos) dr_d
-    LEFT JOIN dpkg_packages dp ON dp.package=dp_d.package AND dp.repo=dr_d.name
-    LEFT JOIN dpkg_repos dr ON dr.name=dr_d.name
-    GROUP BY dp_d.package, dr.realname
-  ) dpkg
-  ON dpkg.package = packages.name
+      dp_d.name package, dr.name repo, dr.realname reponame,
+      max(dp.version COLLATE vercomp) version, dr.category category,
+      dr.architecture architecture
+    FROM packages dp_d
+    INNER JOIN dpkg_repos dr
+    LEFT JOIN dpkg_packages dp ON dp.package=dp_d.name AND dp.repo=dr.name
+    GROUP BY dp_d.name, dr.name
+  ) dpkg ON dpkg.package = packages.name
 WHERE pkgver.branch = trees.mainbranch
-  AND ((spabhost.value IS 'noarch') = (dpkg.repo IS 'noarch'))
+  AND ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
   AND dpkg.repo IS NOT null
   AND (dpkg.version IS NOT null OR (dpkg.category='bsp') = (trees.category='bsp'))
 GROUP BY dpkg.repo
-) c2
-ON c2.repo=c1.repo
-ORDER BY c1.reponame, c1.repo
+) c2 ON c2.repo=c1.repo
+LEFT JOIN (
+SELECT reponame, sum(CASE WHEN dpp IS NULL THEN 1 ELSE 0 END) missing
+FROM (
+  SELECT
+    packages.name package, dr.realname reponame, dr.category category,
+    max(dp.package) dpp
+  FROM packages
+  INNER JOIN dpkg_repos dr
+  INNER JOIN trees ON trees.name = packages.tree
+  INNER JOIN package_versions pv
+    ON pv.package=packages.name AND pv.branch=trees.mainbranch
+    AND pv.version IS NOT NULL
+  LEFT JOIN package_spec spabhost
+    ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
+  LEFT JOIN dpkg_packages dp ON dp.package=packages.name AND dp.repo=dr.name
+  WHERE ((spabhost.value IS 'noarch') = (dr.architecture IS 'noarch'))
+  AND dr.category != 'overlay'
+  AND (dp.package IS NOT null OR (dr.category='bsp') = (trees.category='bsp'))
+  GROUP BY packages.name, dr.realname
+)
+GROUP BY reponame
+) c3 ON c3.reponame=c1.reponame AND c1.testing=0
+ORDER BY c1.category, c1.reponame, c1.testing
 '''
 
-def stats_update(cur):
-    cur.execute(SQL_COUNT_REPO)
+def stats_update(db):
+    db.execute(SQL_COUNT_REPO)
 
-def update(cur):
-    for repo in REPOS:
-        logging.info(repo.name)
-        size, sha256 = release_update(cur, repo)
-        if sha256:
-            package_update(cur, repo, size, sha256)
-    stats_update(cur)
+def update(db):
+    for suite, repos in REPOS.items():
+        pkgrepos = suite_update(db, suite, repos)
+        for repo, path, size, sha256 in pkgrepos.values():
+            package_update(db, repo, path, size, sha256)
+    stats_update(db)
 
 def main(dbfile):
     db = sqlite3.connect(dbfile)
     db.create_collation("vercomp", version_compare)
+    init_db(db)
+    update(db)
     cur = db.cursor()
-    init_db(cur)
-    update(cur)
     cur.execute('PRAGMA optimize')
     db.commit()
 

@@ -10,6 +10,7 @@ import pickle
 import sqlite3
 import operator
 import textwrap
+import tempfile
 import itertools
 import functools
 import subprocess
@@ -20,7 +21,7 @@ import bottle
 
 import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, \
-                  sizeof_fmt, parse_fail_arch, Pager
+                  sizeof_fmt, parse_fail_arch, Pager, FileRemover
 
 __version__ = '1.8'
 
@@ -79,7 +80,7 @@ SELECT version, updated, url FROM piss.v_package_upstream WHERE package=?
 SQL_GET_PACKAGE_CHANGELOG = '''
 SELECT
   ((CASE WHEN ifnull(epoch, '') = '' THEN '' ELSE epoch || ':' END) ||
-   version || (CASE WHEN ifnull(release, '') = '' THEN '' ELSE '-' ||
+   version || (CASE WHEN ifnull(release, '') IN ('', '0') THEN '' ELSE '-' ||
    release END)) fullver, pr.rid rid, m.githash githash,
   round((ev.mtime-2440587.5)*86400) time,
   ev.user email, cm.name fullname, pr.message message
@@ -93,12 +94,12 @@ ORDER BY mtime DESC, rid DESC
 
 SQL_GET_PACKAGE_DPKG = '''
 SELECT
-  version, architecture, repo, dr.realname reponame,
+  version, dp.architecture, repo, dr.realname reponame,
   dr.testing testing, filename, size
 FROM dpkg_packages dp
 LEFT JOIN dpkg_repos dr ON dr.name=dp.repo
 WHERE package = ?
-ORDER BY dr.realname ASC, version COLLATE vercomp DESC
+ORDER BY dr.realname ASC, version COLLATE vercomp DESC, testing DESC
 '''
 
 SQL_GET_PACKAGE_REPO = '''
@@ -111,7 +112,7 @@ LEFT JOIN package_spec spabhost
 LEFT JOIN v_dpkg_packages_new dpkg
   ON dpkg.package = p.name
 WHERE dpkg.repo = ?
-  AND ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch'))
+  AND ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
 ORDER BY p.name
 '''
 
@@ -144,10 +145,10 @@ LEFT JOIN package_spec spabhost
   ON spabhost.package = v_packages.name AND spabhost.key = 'ABHOST'
 LEFT JOIN v_dpkg_packages_new dpkg
   ON dpkg.package = v_packages.name
-WHERE dpkg.reponame = ? AND
+WHERE dpkg.repo = ? AND
   dpkg_version IS NOT null AND
-  (dpkg.reponame IS 'noarch' OR ? != 'noarch') AND
-  ((spabhost.value IS 'noarch') = (dpkg.reponame IS 'noarch'))
+  (dpkg.architecture IS 'noarch' OR ? != 'noarch') AND
+  ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
 GROUP BY name
 HAVING (max(dpkg_version COLLATE vercomp) < full_version COLLATE vercomp)
 ORDER BY name
@@ -221,8 +222,8 @@ ORDER BY name
 
 SQL_GET_REPO_COUNT = '''
 SELECT
-  drs.repo name, dr.realname realname, dr.path path,
-  dr.date date, dr.testing testing, dr.category category,
+  drs.repo name, dr.realname realname, dr.architecture, dr.suite branch,
+  dr.path path, dr.date date, dr.testing testing, dr.category category,
   coalesce(drs.packagecnt, 0) pkgcount,
   coalesce(drs.ghostcnt, 0) ghost,
   coalesce(drs.laggingcnt, 0) lagging,
@@ -248,7 +249,7 @@ FROM (
     (CASE WHEN vpu.version LIKE (p.version || '%') THEN 0 ELSE
      p.version < vpu.version COLLATE vercomp END) ver_compare
   FROM v_packages p
-  LEFT JOIN trees t ON t.name=p.tree
+  INNER JOIN trees t ON t.name=p.tree
   LEFT JOIN piss.v_package_upstream vpu ON vpu.package=p.name
 ) q1
 GROUP BY tree
@@ -271,11 +272,12 @@ LEFT JOIN package_spec spabhost
   ON spabhost.package = dp.package AND spabhost.key = 'ABHOST'
 LEFT JOIN (
     SELECT
-      package,
-      group_concat(version) versions
-    FROM dpkg_packages
-    WHERE repo = 'noarch'
-    GROUP BY package
+      dp.package,
+      group_concat(dp.version) versions
+    FROM dpkg_packages dp
+    INNER JOIN dpkg_repos dr ON dr.name=dp.repo
+    WHERE dr.architecture = 'noarch'
+    GROUP BY dp.package
   ) dpnoarch
   ON dpnoarch.package = dp.package
 WHERE repo = ?
@@ -298,11 +300,12 @@ LEFT JOIN package_spec spabhost
   ON spabhost.package = dp.package AND spabhost.key = 'ABHOST'
 LEFT JOIN (
     SELECT
-      package,
-      group_concat(version) versions
-    FROM dpkg_packages
-    WHERE repo != 'noarch'
-    GROUP BY package
+      dp.package,
+      group_concat(dp.version) versions
+    FROM dpkg_packages dp
+    INNER JOIN dpkg_repos dr ON dr.name=dp.repo
+    WHERE dr.architecture != 'noarch'
+    GROUP BY dp.package
   ) dparch
   ON dparch.package = dp.package
 WHERE repo = ?
@@ -380,7 +383,8 @@ application = app = bottle.Bottle()
 plugin = bottle_sqlite.Plugin(
     dbfile='data/abbs.db',
     readonly=True,
-    collations={'vercomp': version_compare}
+    extensions=('./mod_vercomp.so',)
+    # collations={'vercomp': version_compare}
 )
 app.install(plugin)
 
@@ -549,11 +553,12 @@ def search(db):
     if not q:
         return render('search.html', q=q, packages=[], page=pagination(None))
     if not noredir:
-        row = db.execute("SELECT 1 FROM packages WHERE name=?", (q,)).fetchone()
+        qn = q.strip().lower().replace(' ', '-').replace('_', '-')
+        row = db.execute("SELECT 1 FROM packages WHERE name=?", (qn,)).fetchone()
         if not row:
-            row = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (q,)).fetchone()
+            row = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (qn,)).fetchone()
         if row:
-            bottle.redirect("/packages/" + q)
+            bottle.redirect("/packages/" + qn)
     packages = []
     qesc = RE_FTS5_COLSPEC.sub(r'"\1"', q)
     try:
@@ -584,6 +589,7 @@ def query(db):
 
 @app.route('/packages/<name>')
 def package(name, db):
+    name = name.strip().lower()
     res = db.execute(SQL_GET_PACKAGE_INFO, (name,)).fetchone()
     pkgintree = True
     if res is None:
@@ -706,9 +712,9 @@ def lagging(repo, db):
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
-    reponame = repos[repo]['realname']
-    res = Pager(db.execute(
-                SQL_GET_PACKAGE_LAGGING, (reponame, reponame)), pagesize, page)
+    arch = repos[repo]['architecture']
+    res = Pager(db.execute(SQL_GET_PACKAGE_LAGGING,
+                (repo, arch)), pagesize, page)
     for row in res:
         packages.append(dict(row))
     if packages:
@@ -762,8 +768,9 @@ def missing(repo, db):
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
     reponame = repos[repo]['realname']
+    arch = repos[repo]['architecture']
     res = Pager(db.execute(SQL_GET_PACKAGE_MISSING,
-                (reponame, reponame, reponame)), pagesize, page)
+                (reponame, arch, reponame)), pagesize, page)
     for row in res:
         packages.append(dict(row))
     if packages:
@@ -896,12 +903,35 @@ def cleanmirror(repo, db):
     bottle.response.content_type = 'text/plain; charset=UTF-8'
     return render('cleanmirror.txt', repo=repo, packages=debs)
 
+file_remover = FileRemover()
+
 @app.route('/data/<filename>')
 def data_dl(db, filename):
     if not (filename.endswith('.db') or filename.endswith('.fossil')):
         bottle.abort(404, "Not found: '/data/%s'" % filename)
-    mime = 'application/x-sqlite3; charset=binary'
-    return bottle.static_file(filename, root='data', mimetype=mime, download=filename)
+    origfile = 'data/' + filename
+    con = sqlite3.connect(origfile)
+    fd, bckfile = tempfile.mkstemp(prefix='dl-', suffix='.db')
+    os.close(fd)
+    proc = subprocess.run(
+        ('sqlite3', origfile, '.backup ' + bckfile), check=True)
+
+    headers = dict()
+    headers['Content-Type'] = 'application/x-sqlite3; charset=binary'
+    headers['Content-Disposition'] = 'attachment; filename="%s"' % filename
+    stats = os.stat(origfile)
+    headers['Content-Length'] = clen = stats.st_size
+    lm = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(stats.st_mtime))
+    headers['Last-Modified'] = lm
+    headers['Date'] = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
+
+    if bottle.request.method == 'HEAD':
+        os.unlink(bckfile)
+        return bottle.HTTPResponse('', **headers)
+    else:
+        body = open(bckfile, 'rb')
+        file_remover.cleanup_once_done(body, bckfile)
+        return bottle.HTTPResponse(body, **headers)
 
 @app.route('/api_version')
 def api_version(db):
@@ -923,4 +953,15 @@ def index(db):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0')
+    import sys
+    host = '0.0.0.0'
+    port = 8082
+    if len(sys.argv) > 1:
+        srvhost = sys.argv[1]
+        spl = srvhost.rsplit(":", 1)
+        if spl[1].isnumeric():
+            host = spl[0].lstrip('[').rstrip(']')
+            port = int(spl[1])
+        else:
+            host = srvhost.lstrip('[').rstrip(']')
+    app.run(host=host, port=port)

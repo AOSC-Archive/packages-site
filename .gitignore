@@ -89,3 +89,9 @@ ENV/
 .ropeproject
 
 data/
+
+.fossil
+.marks/
+bottle.py
+temp/
+update-ram*.sh
