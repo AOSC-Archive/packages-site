@@ -139,12 +139,18 @@ LIMIT ?
 
 SQL_GET_PACKAGE_LAGGING = '''
 SELECT
-  v_packages.name name, dpkg.dpkg_version dpkg_version, description, full_version
-FROM v_packages
+  p.name name, dpkg.dpkg_version dpkg_version, description,
+  ((CASE WHEN ifnull(pv.epoch, '') = '' THEN ''
+    ELSE pv.epoch || ':' END) || pv.version ||
+   (CASE WHEN ifnull(pv.release, '') IN ('', '0') THEN ''
+    ELSE '-' || pv.release END)) full_version
+FROM packages p
 LEFT JOIN package_spec spabhost
-  ON spabhost.package = v_packages.name AND spabhost.key = 'ABHOST'
+  ON spabhost.package = p.name AND spabhost.key = 'ABHOST'
 LEFT JOIN v_dpkg_packages_new dpkg
-  ON dpkg.package = v_packages.name
+  ON dpkg.package = p.name
+LEFT JOIN package_versions pv
+  ON pv.package = p.name AND pv.branch = dpkg.branch
 WHERE dpkg.repo = ? AND
   dpkg_version IS NOT null AND
   (dpkg.architecture IS 'noarch' OR ? != 'noarch') AND

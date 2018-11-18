@@ -160,7 +160,8 @@ def init_db(db):
                 "SELECT dp.package package, "
                 "  max(version COLLATE vercomp) dpkg_version, "
                 "  dp.repo repo, dr.realname reponame, "
-                "  dr.architecture architecture "
+                "  dr.architecture architecture, "
+                "  dr.suite branch "
                 "FROM dpkg_packages dp "
                 "LEFT JOIN dpkg_repos dr ON dr.name=dp.repo "
                 "GROUP BY package, repo")
@@ -362,13 +363,13 @@ LEFT JOIN (
     SELECT
       dp_d.name package, dr.name repo, dr.realname reponame,
       max(dp.version COLLATE vercomp) version, dr.category category,
-      dr.architecture architecture
+      dr.architecture architecture, dr.suite branch
     FROM packages dp_d
     INNER JOIN dpkg_repos dr
     LEFT JOIN dpkg_packages dp ON dp.package=dp_d.name AND dp.repo=dr.name
     GROUP BY dp_d.name, dr.name
   ) dpkg ON dpkg.package = packages.name
-WHERE pkgver.branch = trees.mainbranch
+WHERE pkgver.branch = dpkg.branch
   AND ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
   AND dpkg.repo IS NOT null
   AND (dpkg.version IS NOT null OR (dpkg.category='bsp') = (trees.category='bsp'))
