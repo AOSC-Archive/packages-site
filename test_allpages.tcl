@@ -7,11 +7,17 @@ package require sqlite3
 ::http::register https 443 [list ::tls::socket -tls1 1]
 set ::http::defaultCharset utf-8
 
+set fastcheck [expr {[lindex $argv 0] eq "--fast"}]
+if {$fastcheck} {
+    puts "fast check enabled"
+}
+
 set hostname {[::1]}
 set port 18082
 set servhost "$hostname:18082"
-set pserver [exec > /dev/null 2> /dev/null uwsgi_python3 --http-socket $servhost --wsgi-file main.py &]
-puts "server pid $pserver"
+set masterfifo "/tmp/uwsgiservtest.fifo"
+set pserver [exec > /dev/null 2> /dev/null uwsgi_python3 --http-socket $servhost --master-fifo $masterfifo --wsgi-file main.py &]
+puts "started server $pserver"
 
 set urlhost http://$servhost
 set urlmatch [regsub -all {([\[\]])} $urlhost {\\\1}]
@@ -31,6 +37,10 @@ while {$testpath ne ""} {
         WHERE status IS null ORDER BY random() LIMIT 1
     }]
     set testpath [lindex $row 0]
+    if {$fastcheck && [regexp "^/(packages|changelog|revdep)/" $testpath]} {
+        db eval {UPDATE links SET status=-1 WHERE url=$testpath}
+        continue
+    }
     set testref [lindex $row 1]
     set token [::http::geturl $urlhost$testpath -timeout 5000]
     set ncode [::http::ncode $token]
@@ -59,4 +69,17 @@ while {$testpath ne ""} {
     ::http::cleanup $token
 }
 
-exec kill $pserver
+puts "=== Summary ==="
+db eval {
+    SELECT status, count(url) cnt FROM links GROUP BY status ORDER BY status
+} values {
+    if {$values(status) == -1} {
+        puts "ignored: $values(cnt) pages"
+    } else {
+        puts "$values(status): $values(cnt) pages"
+    }
+}
+set mf [open $masterfifo w]
+puts $mf Q
+after 1000
+file delete $masterfifo
