@@ -3,6 +3,14 @@ Package list website. https://packages.aosc.io/
 
 For more information, see: https://wiki.aosc.io/developers/packages-site
 
+## Dependencies
+
+* C compiler (gcc)
+* git
+* fossil
+* `requirements.txt`
+* (for testing) tcl, tdom, tcl sqlite binding
+
 ## Deploy
 
 ```

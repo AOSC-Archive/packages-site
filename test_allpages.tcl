@@ -1,10 +1,8 @@
 #!/usr/bin/tclsh
 package require uri
-package require tls
 package require http
 package require tdom
 package require sqlite3
-::http::register https 443 [list ::tls::socket -tls1 1]
 set ::http::defaultCharset utf-8
 
 set fastcheck [expr {[lindex $argv 0] eq "--fast"}]
