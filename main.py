@@ -212,16 +212,16 @@ ORDER BY vp.name
 
 SQL_GET_PACKAGE_LIST = '''
 SELECT
-  name, tree, tree_category, branch, category, section, pkg_section, directory,
-  description, version, full_version, commit_time, committer,
-  dpkg.dpkg_version dpkg_version,
+  p.name, p.tree, p.tree_category, p.branch, p.category, p.section,
+  p.pkg_section, p.directory, p.description, p.version, p.full_version,
+  p.commit_time, p.committer, dpkg.dpkg_version dpkg_version,
   group_concat(DISTINCT dpkg.reponame) dpkg_availrepos,
-  ifnull(CASE WHEN dpkg_version IS NOT null
-   THEN (dpkg_version > full_version COLLATE vercomp) -
-   (dpkg_version < full_version COLLATE vercomp)
+  ifnull(CASE WHEN dpkg.dpkg_version IS NOT null
+   THEN (dpkg.dpkg_version > p.full_version COLLATE vercomp) -
+   (dpkg.dpkg_version < p.full_version COLLATE vercomp)
    ELSE -1 END, -2) ver_compare
-FROM v_packages
-LEFT JOIN v_dpkg_packages_new dpkg ON dpkg.package = v_packages.name
+FROM v_packages p
+LEFT JOIN v_dpkg_packages_new dpkg ON dpkg.package = p.name
 GROUP BY name
 ORDER BY name
 '''

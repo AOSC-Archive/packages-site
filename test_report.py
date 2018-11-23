@@ -57,5 +57,19 @@ class TestReportNum(unittest.TestCase):
         d = req.json()
         self.assertEqual(len(d['packages']), 100)
 
+    def test_listjson(self):
+        req = requests.get(URLBASE + '/list.json')
+        req.raise_for_status()
+        d_json = req.json()
+        req = requests.get(URLBASE + '/?type=json')
+        req.raise_for_status()
+        d_index = req.json()
+        self.assertEqual(len(d_json['packages']), d_index['total'])
+
+    def test_pkgtrie(self):
+        req = requests.get(URLBASE + '/pkgtrie.js')
+        req.raise_for_status()
+        self.assertTrue(req.text.startswith('var pkgTrie = {'))
+
 if __name__ == '__main__':
     unittest.main()
