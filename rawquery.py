@@ -28,13 +28,13 @@ try:
     cur.execute(sys.stdin.read())
     if cur.description:
         result['header'] = tuple(x[0] for x in cur.description)
-    for i, row in enumerate(cur):
+    for i, row in enumerate(cur, 1):
         result['rows'].append(tuple(row))
-        if i > MAX_ROW:
+        if i >= MAX_ROW:
             result['error'] = 'only showing the first %d rows' % MAX_ROW
             break
     conn.close()
-except sqlite3.DatabaseError as ex:
+except (sqlite3.Error, sqlite3.Warning) as ex:
     result['error'] = str(ex)
 
 pickle.dump(result, sys.stdout.buffer, pickle.HIGHEST_PROTOCOL)

@@ -586,10 +586,13 @@ def query(db):
     q = bottle.request.forms.get('q')
     if not q:
         return render('query.html', q='', headers=[], rows=[], error=None)
-    proc = subprocess.run(
-        ('python3', 'rawquery.py', 'data/abbs.db'),
-        input=q.encode('utf-8'), stdout=subprocess.PIPE, check=True)
-    result = pickle.loads(proc.stdout)
+    try:
+        proc = subprocess.run(
+            ('python3', 'rawquery.py', 'data/abbs.db'),
+            input=q.encode('utf-8'), stdout=subprocess.PIPE, check=True)
+        result = pickle.loads(proc.stdout)
+    except Exception as ex:
+        result = {'error': 'failed to execute query.'}
     return render('query.html', q=q, headers=result.get('header', ()),
                   rows=result.get('rows', ()), error=result.get('error'))
 
@@ -829,7 +832,7 @@ def updates(db):
     if packages:
         return render('updates.html', packages=packages)
     else:
-        return render('error.html', error="There's no ghost packages.")
+        return render('error.html', error="There's no updates.")
 
 @app.route('/repo/<repo:path>')
 def repo(repo, db):
