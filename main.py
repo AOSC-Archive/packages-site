@@ -608,6 +608,7 @@ def package(name, db):
         return bottle.HTTPResponse(render('error.html',
                 error='Package "%s" not found.' % name), 404)
     pkg = dict(res)
+    # Process depenencies
     dep_dict = {}
     if pkg['dependency']:
         for dep in pkg['dependency'].split(','):
@@ -617,6 +618,7 @@ def package(name, db):
             else:
                 dep_dict[dep_rel] = [(dep_pkg, dep_ver)]
     pkg['dependency'] = dep_dict
+    # Generate version matrix
     fullver = pkg['full_version']
     repos = db_repos(db)
     dpkg_dict = {}
@@ -653,6 +655,7 @@ def package(name, db):
     pkg['dpkg_matrix'] = [
         (repo, [dpkg_dict[repo].get(ver) for ver in ver_list]
          if repo in dpkg_dict else [None]*len(ver_list)) for repo in reponames]
+    # Guess upstream url
     if pkg['srctype']:
         pkg['srctype'] = SRC_TYPE[pkg['srctype']]
         if RE_SRCHOST.match(pkg['srcurl']):

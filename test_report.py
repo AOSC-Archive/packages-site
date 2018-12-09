@@ -109,6 +109,7 @@ class TestWebsite(unittest.TestCase):
             ("delete from trees", False),
             ("update trees set name='a'", False),
             ("select * from package_versions", False),
+            ("select count(*) from package_versions", True),
             ("WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x<5) SELECT x FROM c;", False),
             ("select 1;select 2;", False),
         ):
