@@ -222,11 +222,12 @@ def suite_update(db, suite, repos):
                 item['name'], int(item['size']), item['sha256'])
     rel_date = calendar.timegm(parsedate(rel['Date'])) if 'Date' in rel else None
     rel_valid = calendar.timegm(parsedate(rel['Valid-Until'])) if 'Valid-Until' in rel else None
+    pkgrepos2 = {}
     for repo in repos:
         pkgrepo = pkgrepos.get((repo.component, repo.architecture))
         if pkgrepo:
             pkgpath = '/'.join((REPOPATH, 'dists', suite, pkgrepo[0]))
-            pkgrepos[repo.component, repo.architecture] = (repo, pkgpath) + pkgrepo[1:]
+            pkgrepos2[repo.component, repo.architecture] = (repo, pkgpath) + pkgrepo[1:]
             cur.execute('REPLACE INTO dpkg_repos VALUES '
                 '(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)', (
                 repo.name, repo.realname, REPOPATH,
@@ -243,7 +244,7 @@ def suite_update(db, suite, repos):
                 repo.architecture, None, None, None, None, None, None))
     db.commit()
     cur.close()
-    return pkgrepos
+    return pkgrepos2
 
 _relationship_fields = ('depends', 'pre-depends', 'recommends',
         'suggests', 'breaks', 'conflicts', 'provides', 'replaces',
