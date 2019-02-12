@@ -97,6 +97,9 @@ class TestWebsite(unittest.TestCase):
         req = requests.get(URLBASE + '/search/?q=glibc&noredir=1')
         req.raise_for_status()
         self.assertFalse(req.history)
+        req = requests.get(URLBASE + '/search/?q=glibc&type=json')
+        req.raise_for_status()
+        self.assertFalse(req.history)
 
     def test_query(self):
         req = requests.get(URLBASE + '/query/')

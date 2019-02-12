@@ -436,11 +436,11 @@ jinja2_settings = {
 }
 jinja2_template = functools.partial(bottle.jinja2_template,
     template_settings=jinja2_settings)
+isjson = lambda: (
+    bottle.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    or bottle.request.query.get('type') == 'json')
 render = lambda *args, **kwargs: (
-    kwargs
-    if (bottle.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-        or bottle.request.query.get('type') == 'json')
-    else jinja2_template(*args, **kwargs)
+    kwargs if isjson() else jinja2_template(*args, **kwargs)
 )
 
 
@@ -554,7 +554,7 @@ def pkgtrie(db):
 @app.route('/search/')
 def search(db):
     q = bottle.request.query.get('q')
-    noredir = bottle.request.query.get('noredir')
+    noredir = bottle.request.query.get('noredir') or isjson()
     page, pagesize = get_page()
     if not q:
         return render('search.html', q=q, packages=[], page=pagination(None))
