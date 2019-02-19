@@ -201,11 +201,14 @@ def suite_update(db, suite, repos):
     if req.status_code == 404:
         logging.error('dpkg suite %s not found' % suite)
         for repo in repos:
-            cur.execute('REPLACE INTO dpkg_repos VALUES '
-                '(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)',
-                (repo.name, repo.realname, REPOPATH, repo.source_tree,
-                repo.category, repo.testing, repo.suite, repo.component,
-                repo.architecture, None, None, None, None, None, None))
+            cur.execute('UPDATE dpkg_repos SET origin=null, label=null, '
+                'codename=null, date=null, valid_until=null, description=null '
+                'WHERE name=?', (repo.name,))
+            cur.execute('DELETE FROM dpkg_package_dependencies WHERE repo=?',
+                (repo.name,))
+            cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo=?',
+                (repo.name,))
+            cur.execute('DELETE FROM dpkg_packages WHERE repo=?', (repo.name,))
         return {}
     else:
         req.raise_for_status()
@@ -237,11 +240,14 @@ def suite_update(db, suite, repos):
                 rel.get('Description')
             ))
         else:
-            cur.execute('REPLACE INTO dpkg_repos VALUES '
-                '(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)',
-                (repo.name, repo.realname, REPOPATH, repo.source_tree,
-                repo.category, repo.testing, repo.suite, repo.component,
-                repo.architecture, None, None, None, None, None, None))
+            cur.execute('UPDATE dpkg_repos SET origin=null, label=null, '
+                'codename=null, date=null, valid_until=null, description=null '
+                'WHERE name=?', (repo.name,))
+            cur.execute('DELETE FROM dpkg_package_dependencies WHERE repo=?',
+                (repo.name,))
+            cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo=?',
+                (repo.name,))
+            cur.execute('DELETE FROM dpkg_packages WHERE repo=?', (repo.name,))
     db.commit()
     cur.close()
     return pkgrepos2
