@@ -23,5 +23,21 @@ python3 $ABBS_META -p . -m . -d abbs.db -b master -B master \
     -c bsp -u 'https://github.com/AOSC-Dev/aosc-os-arm-bsps' -P 2 aosc-os-arm-bsps
 pushd "$DIR"
 if [ ! -f mod_vercomp.so ]; then make mod_vercomp.so; fi
+if [ ! -f dbhash ]; then make dbhash; fi
 popd
 python3 "$DIR/dpkgrepo.py" abbs.db
+rm -rf cache.new
+mkdir -p cache.new
+dbs="abbs.db piss.db"
+for repo in $REPOS; do dbs+=" $repo-marks.db"; done
+pushd cache.new
+for db in $dbs; do
+    sqlite3 ../$db ".backup $db"
+    stat --printf="%s " $db >> dbhashs
+    "$DIR/dbhash" $db >> dbhashs
+    gzip -9 --rsyncable $db
+done
+popd
+mv cache cache.old
+mv cache.new cache
+rm -rf cache.old

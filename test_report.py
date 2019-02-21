@@ -6,22 +6,35 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
+import subprocess
+
 import requests
 
 URLBASE = 'http://127.0.0.1:8082'
 
-def download_file(url, localpath, filename=None):
+def download_file(url, localpath, filename=None, gzip=True):
     local_filename = filename or url.split('/')[-1]
-    r = requests.get(url, stream=True)
+    if gzip:
+        r = requests.get(url)
+    else:
+        r = requests.get(url, headers={'Accept-Encoding': None}, stream=True)
+    r.raise_for_status()
     filepath = os.path.join(localpath, local_filename)
     with open(filepath, 'wb') as f:
-        shutil.copyfileobj(r.raw, f)
-    return local_filename
+        if gzip:
+            f.write(r.content)
+        else:
+            shutil.copyfileobj(r.raw, f)
+    etag = r.headers.get('ETag')
+    assert os.stat(filepath).st_size == int(r.headers['Content-Length'])
+    r.close()
+    return local_filename, etag
 
 class TestWebsite(unittest.TestCase):
 
     def setUp(self):
         self.maxDiff = None
+        self.dbhash = shutil.which('dbhash') or shutil.which('./dbhash')
 
     def test_listnumber(self):
         req = requests.get(URLBASE + '/?type=json')
@@ -152,16 +165,31 @@ class TestWebsite(unittest.TestCase):
                 'aosc-os-abbs-marks.db',
                 'aosc-os-core-marks.db',
                 'aosc-os-arm-bsps-marks.db',
+            ):
+                url = URLBASE + '/data/' + name
+                for usegz in (True, False):
+                    dbfn, etag = download_file(url, tmpdir, gzip=usegz)
+                    dbpath = os.path.join(tmpdir, dbfn)
+                    self.assertTrue(os.path.isfile(dbpath))
+                    ret = subprocess.check_output((self.dbhash, dbpath))
+                    dbhash = ret.decode('utf-8').split(' ', 1)[0]
+                    self.assertEqual(dbhash, etag.strip('"'))
+                    db = sqlite3.connect(dbpath)
+                    result = db.execute('PRAGMA integrity_check;').fetchall()
+                    self.assertListEqual(result, [('ok',)])
+                    db.close()
+                    os.unlink(dbpath)
+                req = requests.get(url, headers={'If-None-Match': etag})
+                self.assertEqual(req.status_code, 304)
+                req.close()
+            for name in (
                 'aosc-os-abbs.fossil',
                 'aosc-os-core.fossil',
                 'aosc-os-arm-bsps.fossil',
             ):
-                dbpath = download_file(URLBASE + '/data/' + name, tmpdir)
-                db = sqlite3.connect(dbpath)
-                result = db.execute('PRAGMA integrity_check;').fetchall()
-                self.assertListEqual(result, [('ok',)])
-                db.close()
-                os.unlink(dbpath)
+                req = requests.get(URLBASE + '/data/' + name)
+                self.assertEqual(req.status_code, 404)
+                req.close()
 
     def test_api_version(self):
         req = requests.get(URLBASE + '/api_version')

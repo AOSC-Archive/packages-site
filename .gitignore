@@ -95,3 +95,4 @@ data/
 bottle.py
 temp/
 update-ram*.sh
+dbhash

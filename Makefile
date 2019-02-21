@@ -1,5 +1,8 @@
 CC = gcc
-CFLAGS = -fPIC -shared -O2 -Wall -Wextra
+CFLAGS = -fPIC -O2 -Wall -Wextra
 
 mod_vercomp.so: vercomp.c
-	$(CC) $(CFLAGS) vercomp.c -o mod_vercomp.so
+	$(CC) $(CFLAGS) -shared vercomp.c -o mod_vercomp.so
+
+dbhash: dbhash.c
+	$(CC) $(CFLAGS) -lsqlite3 dbhash.c -o dbhash

@@ -229,6 +229,11 @@ def suite_update(db, suite, repos):
     for repo in repos:
         pkgrepo = pkgrepos.get((repo.component, repo.architecture))
         if pkgrepo:
+            res = cur.execute('SELECT date FROM dpkg_repos WHERE name=?',
+                              (repo.name,)).fetchone()
+            if res and rel_date:
+                if res[0] >= rel_date:
+                    continue
             pkgpath = '/'.join((REPOPATH, 'dists', suite, pkgrepo[0]))
             pkgrepos2[repo.component, repo.architecture] = (repo, pkgpath) + pkgrepo[1:]
             cur.execute('REPLACE INTO dpkg_repos VALUES '

@@ -5,12 +5,12 @@ import os
 import re
 import time
 import json
+import gzip
 import html
 import pickle
 import sqlite3
 import operator
 import textwrap
-import tempfile
 import itertools
 import functools
 import subprocess
@@ -21,7 +21,7 @@ import bottle
 
 import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, \
-                  sizeof_fmt, parse_fail_arch, Pager, FileRemover
+                  sizeof_fmt, parse_fail_arch, iter_read1, Pager
 
 __version__ = '2.0'
 
@@ -418,7 +418,7 @@ def response_lm(f_body=None, status=None, headers=None, modified=None, etag=None
     if ims is not None and ims >= int(modified):
         return bottle.HTTPResponse(status=304, **headers)
 
-    body = '' if bottle.request.method == 'HEAD' else f_body()
+    body = b'' if bottle.request.method == 'HEAD' else f_body()
 
     return bottle.HTTPResponse(body, status, **headers)
 
@@ -564,7 +564,7 @@ def search(db):
         if not row:
             row = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (qn,)).fetchone()
         if row:
-            bottle.redirect("/packages/" + qn)
+            bottle.redirect("/packages/" + qn, 303)
     packages = []
     qesc = RE_FTS5_COLSPEC.sub(r'"\1"', q)
     try:
@@ -915,35 +915,37 @@ def cleanmirror(repo, db):
     bottle.response.content_type = 'text/plain; charset=UTF-8'
     return render('cleanmirror.txt', repo=repo, packages=debs)
 
-file_remover = FileRemover()
-
 @app.route('/data/<filename>')
 def data_dl(db, filename):
-    if not (filename.endswith('.db') or filename.endswith('.fossil')):
+    if not (filename.endswith('.db')):
         bottle.abort(404, "Not found: '/data/%s'" % filename)
-    origfile = 'data/' + filename
-    con = sqlite3.connect(origfile)
-    fd, bckfile = tempfile.mkstemp(prefix='dl-', suffix='.db')
-    os.close(fd)
-    proc = subprocess.run(
-        ('sqlite3', origfile, '.backup ' + bckfile), check=True)
-
-    headers = dict()
-    headers['Content-Type'] = 'application/x-sqlite3; charset=binary'
-    headers['Content-Disposition'] = 'attachment; filename="%s"' % filename
-    stats = os.stat(origfile)
-    headers['Content-Length'] = clen = stats.st_size
-    lm = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(stats.st_mtime))
-    headers['Last-Modified'] = lm
-    headers['Date'] = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
-
-    if bottle.request.method == 'HEAD':
-        os.unlink(bckfile)
-        return bottle.HTTPResponse('', **headers)
+    cachedir = 'data/cache'
+    fsize = fhash = None
+    with open(os.path.join(cachedir, 'dbhashs'), 'r', encoding='utf-8') as f:
+        for ln in f:
+            fsize, fhash, fname = ln.strip().split(' ', 2)
+            if fname == filename:
+                break
+    if fsize is None:
+        bottle.abort(404, "Not found: '/data/%s'" % filename)
+    gzfile = os.path.join(cachedir, filename + '.gz')
+    accept_encoding = bottle.request.headers.get('Accept-Encoding', '')
+    headers = {
+        'Vary': 'Accept-Encoding',
+        'Content-Type': 'application/x-sqlite3; charset=binary',
+        'Content-Length': fsize,
+        'Content-Disposition': 'attachment; filename="%s"' % filename
+    }
+    attachfn = filename
+    mtime = os.stat(gzfile).st_mtime
+    etag = '"%s"' % fhash
+    if 'gzip' in accept_encoding.lower():
+        headers['Content-Encoding'] = 'gzip'
+        content = lambda: open(gzfile, 'rb')
     else:
-        body = open(bckfile, 'rb')
-        file_remover.cleanup_once_done(body, bckfile)
-        return bottle.HTTPResponse(body, **headers)
+        # prevent it from using sendfile
+        content = lambda: iter_read1(gzip.open(gzfile, 'rb'))
+    return response_lm(content, headers=headers, modified=mtime, etag=etag)
 
 @app.route('/api_version')
 def api_version(db):

@@ -43,6 +43,14 @@ def parse_fail_arch(s):
     else:
         return TestList('@', [s])
 
+def iter_read1(fd):
+    while True:
+        res = fd.read1()
+        if res:
+            yield res
+        else:
+            return
+
 class FileRemover(object):
     def __init__(self):
         self.weak_references = dict()  # weak_ref -> filepath to remove
