@@ -83,18 +83,33 @@ class TestWebsite(unittest.TestCase):
         self.assertEqual(len(d['packages']), 100)
 
     def test_listjson(self):
-        req = requests.get(URLBASE + '/list.json')
+        url = URLBASE + '/list.json'
+        req = requests.get(url)
         req.raise_for_status()
+        lm = req.headers['Last-Modified']
         d_json = req.json()
+        req.close()
+        req = requests.get(url, headers={"If-Modified-Since": lm})
+        self.assertEqual(req.status_code, 304)
+        self.assertEqual(req.content, b'')
+        req.close()
         req = requests.get(URLBASE + '/?type=json')
         req.raise_for_status()
         d_index = req.json()
+        req.close()
         self.assertEqual(len(d_json['packages']), d_index['total'])
 
     def test_pkgtrie(self):
-        req = requests.get(URLBASE + '/pkgtrie.js')
+        url = URLBASE + '/pkgtrie.js'
+        req = requests.get(url)
         req.raise_for_status()
+        lm = req.headers['Last-Modified']
         self.assertTrue(req.text.startswith('var pkgTrie = {'))
+        req.close()
+        req = requests.get(url, headers={"If-Modified-Since": lm})
+        self.assertEqual(req.status_code, 304)
+        self.assertEqual(req.content, b'')
+        req.close()
 
     def test_static(self):
         for filename in ('aosc.png', 'style.css', 'autocomplete.js'):
@@ -181,6 +196,7 @@ class TestWebsite(unittest.TestCase):
                     os.unlink(dbpath)
                 req = requests.get(url, headers={'If-None-Match': etag})
                 self.assertEqual(req.status_code, 304)
+                self.assertEqual(req.content, b'')
                 req.close()
             for name in (
                 'aosc-os-abbs.fossil',
