@@ -14,7 +14,7 @@ set hostname {[::1]}
 set port 18082
 set servhost "$hostname:18082"
 set masterfifo "/tmp/uwsgiservtest.fifo"
-set pserver [exec > /dev/null 2> /dev/null uwsgi_python3 --http-socket $servhost --master-fifo $masterfifo --wsgi-file main.py &]
+set pserver [exec > /dev/null 2> /dev/null uwsgi_python37 --http-socket $servhost --master-fifo $masterfifo --wsgi-file main.py &]
 puts "started server $pserver"
 
 set urlhost http://$servhost

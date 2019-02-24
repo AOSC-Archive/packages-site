@@ -9,7 +9,7 @@
 {% block main %}
 <div class="package" id="{{ pkg['name'] }}">
 {% if pkg['tree'] -%}
-<p><b class="pkg-field">Source</b>: <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/tree/{{ pkg['branch'] }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/{{ pkg['directory'] }}"><span class="pkg-section">{{ pkg['tree'] }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/</span>{{ pkg['directory'] }}</a></p>
+<p><b class="pkg-field">Section</b>: {{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}</p>
 {%- else -%}
 <p><b class="pkg-field">Source</b>: (missing)</p>
 {%- endif %}
@@ -53,7 +53,12 @@
   <tr>
     <th>Version</th>
     {% for version in pkg['versions'] -%}
-    <th class="dpkg-ver">{{ version }}</th>
+    {% if version[1] -%}
+    <th class="dpkg-ver dpkg-{{ version[1] }}" title="{{ version[1] }}">
+      <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/tree/{{ version[1] }}/{{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}/{{ pkg['directory'] }}/spec">{{ version[0] }}</a></th>
+    {%- else -%}
+    <th class="dpkg-ver">{{ version[0] }}</th>
+    {%- endif %}
     {%- endfor %}
   </tr>
 </thead>
@@ -68,7 +73,7 @@
       {%- elif col['testing'] == 2 -%}
       <td class="dpkg dpkg-explosive" title="explosive">
       {%- else -%}<td class="dpkg">{%- endif %}
-        <a href="https://repo.aosc.io/{{ repos[col['repo']]['path'] }}/{{ col['filename'] }}">
+        <a href="https://repo.aosc.io/debs/{{ col['filename'] }}">
           {{ col['size']|sizeof_fmt }}
         </a>
       </td>{%- else -%}<td class="dpkg dpkg-missing"></td>

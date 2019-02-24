@@ -23,7 +23,7 @@ import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, \
                   sizeof_fmt, parse_fail_arch, iter_read1, Pager
 
-__version__ = '2.0'
+__version__ = '2.1'
 
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
@@ -69,6 +69,18 @@ SELECT DISTINCT
   '' dependency, 0 noarch, NULL fail_arch, NULL srctype, NULL srcurl,
   0 hasrevdep
 FROM dpkg_packages WHERE package = ?
+'''
+
+SQL_GET_PACKAGE_VERSIONS = '''
+SELECT
+  v.branch, ((CASE WHEN ifnull(epoch, '') = '' THEN '' ELSE epoch || ':' END) ||
+  version || (CASE WHEN ifnull(release, '') IN ('', '0') THEN '' ELSE '-' ||
+  release END)) fullver
+FROM package_versions v
+INNER JOIN packages p ON p.name=v.package
+INNER JOIN tree_branches b ON b.tree=p.tree AND b.branch=v.branch
+WHERE v.package = ?
+ORDER BY b.priority DESC
 '''
 
 SQL_ATTACH_PISS = "ATTACH 'file:data/piss.db?mode=ro' AS piss"
@@ -651,7 +663,10 @@ def package(name, db):
         ))
     else:
         reponames = sorted(dpkg_dict.keys())
-    pkg['versions'] = ver_list
+    src_vers = {}
+    for branch, fullver in db.execute(SQL_GET_PACKAGE_VERSIONS, (name,)):
+        src_vers[fullver] = branch
+    pkg['versions'] = [(v, src_vers.get(v)) for v in ver_list]
     pkg['dpkg_matrix'] = [
         (repo, [dpkg_dict[repo].get(ver) for ver in ver_list]
          if repo in dpkg_dict else [None]*len(ver_list)) for repo in reponames]
@@ -684,7 +699,7 @@ def package(name, db):
         else:
             pkg['upstream']['ver_compare'] = VER_REL[
                 version_compare(pkg['version'], res_upstream['version'])]
-    return render('package.html', pkg=pkg, dep_rel=DEP_REL, repos=repos)
+    return render('package.html', pkg=pkg, dep_rel=DEP_REL)
 
 @app.route('/changelog/<name>')
 def changelog(name, db):
