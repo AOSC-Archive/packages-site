@@ -169,8 +169,6 @@ def init_db(db):
                 ' ON dpkg_repos (realname)')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_packages'
                 ' ON dpkg_packages (package, repo)')
-    cur.execute('CREATE INDEX IF NOT EXISTS idx_dpkg_package_dependencies'
-                ' ON dpkg_package_dependencies (package)')
     db.commit()
     cur.close()
 
