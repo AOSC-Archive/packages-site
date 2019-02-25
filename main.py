@@ -932,7 +932,13 @@ def cleanmirror(repo, db):
 
 @app.route('/data/<filename>')
 def data_dl(db, filename):
-    if not (filename.endswith('.db')):
+    attachfn = filename
+    if filename.endswith('.db'):
+        reqgz = False
+    elif filename.endswith('.db.gz'):
+        reqgz = True
+        filename = filename[:-3]
+    else:
         bottle.abort(404, "Not found: '/data/%s'" % filename)
     cachedir = 'data/cache'
     fsize = fhash = None
@@ -941,21 +947,26 @@ def data_dl(db, filename):
             fsize, fhash, fname = ln.strip().split(' ', 2)
             if fname == filename:
                 break
-    if fsize is None:
-        bottle.abort(404, "Not found: '/data/%s'" % filename)
+        else:
+            bottle.abort(404, "Not found: '/data/%s'" % filename)
     gzfile = os.path.join(cachedir, filename + '.gz')
     accept_encoding = bottle.request.headers.get('Accept-Encoding', '')
     headers = {
         'Vary': 'Accept-Encoding',
         'Content-Type': 'application/x-sqlite3; charset=binary',
         'Content-Length': fsize,
-        'Content-Disposition': 'attachment; filename="%s"' % filename,
+        'Content-Disposition': 'attachment; filename="%s"' % attachfn,
         'Cache-Control': 'no-store, no-transform'
     }
-    attachfn = filename
-    mtime = os.stat(gzfile).st_mtime
+    stat = os.stat(gzfile)
+    mtime = stat.st_mtime
     etag = '"%s"' % fhash
-    if 'gzip' in accept_encoding.lower():
+    if reqgz:
+        del headers['Vary']
+        headers['Content-Type'] = 'application/gzip; charset=binary'
+        headers['Content-Length'] = stat.st_size
+        content = lambda: open(gzfile, 'rb')
+    elif 'gzip' in accept_encoding.lower():
         headers['Content-Encoding'] = 'gzip'
         content = lambda: open(gzfile, 'rb')
     else:
