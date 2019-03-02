@@ -21,7 +21,7 @@ import bottle
 
 import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, \
-                  sizeof_fmt, parse_fail_arch, iter_read1, Pager
+                  sizeof_fmt, parse_fail_arch, iter_read1, remember, Pager
 
 __version__ = '2.1'
 
@@ -502,45 +502,28 @@ def render_html(**kwargs):
     return template.render(**kvars)
 
 
-def db_last_modified(db, ttl=3600):
-    now = time.monotonic()
-    if (not db_last_modified.last_updated or
-        now - db_last_modified.last_updated > ttl):
-        row = db.execute(
-            'SELECT commit_time FROM package_versions ORDER BY commit_time DESC LIMIT 1'
-            ).fetchone()
-        if row:
-            db_last_modified.last_updated = now
-            db_last_modified.value = row[0]
-    return db_last_modified.value
-db_last_modified.last_updated = float('-inf')
-db_last_modified.value = 0
+@remember(3600)
+def db_last_modified(db):
+    row = db.execute('SELECT commit_time FROM package_versions '
+                     'ORDER BY commit_time DESC LIMIT 1').fetchone()
+    if row:
+        return row[0]
+    else:
+        return 0
 
 
-def db_repos(db, ttl=1800):
-    now = time.monotonic()
-    if (not db_last_modified.last_updated or
-        now - db_repos.last_updated > ttl):
-        d = collections.OrderedDict((row['name'], dict(row))
-            for row in db.execute(SQL_GET_REPO_COUNT))
-        db_repos.last_updated = now
-        db_repos.value = d
-    return db_repos.value
-db_repos.last_updated = float('-inf')
-db_repos.value = {}
+@remember(1800)
+def db_repos(db):
+    return collections.OrderedDict((row['name'], dict(row))
+        for row in db.execute(SQL_GET_REPO_COUNT))
 
 
-def db_trees(db, ttl=1800):
+@remember(1800)
+def db_trees(db):
     db.execute(SQL_ATTACH_PISS)
-    now = time.monotonic()
-    if now - db_trees.last_updated > ttl:
-        d = collections.OrderedDict((row['name'], dict(row))
-            for row in db.execute(SQL_GET_TREES))
-        db_trees.last_updated = now
-        db_trees.value = d
-    return db_trees.value
-db_trees.last_updated = float('-inf')
-db_trees.value = {}
+    d = collections.OrderedDict((row['name'], dict(row))
+        for row in db.execute(SQL_GET_TREES))
+    return d
 
 
 def makefullver(epoch, version, release):
@@ -762,6 +745,7 @@ def srcupd(tree, db):
                 error='Source tree "%s" not found.' % tree), 404)
     section = bottle.request.query.get('section') or None
     packages = []
+    db.execute(SQL_ATTACH_PISS)
     res = Pager(db.execute(SQL_GET_PACKAGE_SRCUPD, (tree, section, section)), pagesize, page)
     for row in res:
         packages.append(dict(row))

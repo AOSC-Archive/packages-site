@@ -8,6 +8,7 @@ import time
 import weakref
 import functools
 import collections
+import collections.abc
 from debian_support import version_compare as _version_compare
 
 cmp = lambda a, b: ((a > b) - (a < b))
@@ -50,6 +51,20 @@ def iter_read1(fd):
             yield res
         else:
             return
+
+def remember(ttl):
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            now = time.monotonic()
+            if now - wrapper.last_updated > ttl:
+                wrapper.last_updated = now
+                wrapper.cached_value = fn(*args, **kwargs)
+            return wrapper.cached_value
+        wrapper.last_updated = float('-inf')
+        wrapper.cached_value = None
+        return wrapper
+    return deco
 
 class FileRemover(object):
     def __init__(self):
