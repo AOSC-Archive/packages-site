@@ -241,7 +241,8 @@ ORDER BY name
 SQL_GET_REPO_COUNT = '''
 SELECT
   drs.repo name, dr.realname realname, dr.architecture, dr.suite branch,
-  dr.path path, dr.date date, dr.testing testing, dr.category category,
+  dr.date date, dr.testing testing, dr.category category,
+  (drm.name IS NULL) testingonly,
   coalesce(drs.packagecnt, 0) pkgcount,
   coalesce(drs.ghostcnt, 0) ghost,
   coalesce(drs.laggingcnt, 0) lagging,
@@ -254,6 +255,7 @@ LEFT JOIN (
   LEFT JOIN dpkg_repos dr2 ON dr2.name=drs2.repo
   WHERE dr2.testing=0
 ) drs_m ON drs_m.repo=dr.realname
+LEFT JOIN dpkg_repos drm ON drm.realname=dr.realname AND drm.testing=0
 ORDER BY drs_m.packagecnt DESC, dr.realname ASC, dr.testing ASC
 '''
 

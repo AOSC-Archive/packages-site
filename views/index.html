@@ -48,7 +48,9 @@
 {% for repo in repos -%}
 {% if not repo['testing'] or repo['pkgcount'] -%}
   <tr class="repo-row{{ ' repo-testing' if repo['testing'] else '' }}">
-    {% if repo['testing'] -%}
+    {% if repo['testingonly'] -%}
+    <td class="repo-name repo-name">{{ repo['name'] }}</td>
+    {%- elif repo['testing'] -%}
     <td class="repo-name repo-name-testing">{{ repo['branch'] }}</td>
     {%- else -%}
     <td class="repo-name">{{ repo['realname'] }}</td>
