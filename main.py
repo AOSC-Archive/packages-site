@@ -34,12 +34,13 @@ SELECT
   dep.dependency dependency,
   (spabhost.value IS 'noarch') noarch, spfailarch.value fail_arch,
   spsrc.key srctype, spsrc.value srcurl,
-  (revdep.dependency IS NOT null) hasrevdep
+  EXISTS(SELECT 1 FROM package_dependencies revpd
+    WHERE revpd.relationship IN ('PKGDEP', 'BUILDDEP', 'PKGRECOM')
+    AND revpd.dependency = v_packages.name) hasrevdep
 FROM v_packages
 LEFT JOIN (
-    SELECT
-      package,
-      group_concat(dependency || '|' || version || '|' || relationship) dependency
+    SELECT package, group_concat(dependency || '|' || coalesce(relop, '') ||
+      coalesce(version, '') || '|' || relationship) dependency
     FROM package_dependencies
     GROUP BY package
   ) dep
@@ -51,13 +52,6 @@ LEFT JOIN package_spec spfailarch
 LEFT JOIN package_spec spsrc
   ON spsrc.package = v_packages.name
   AND spsrc.key IN ('SRCTBL', 'GITSRC', 'SVNSRC', 'BZRSRC')
-LEFT JOIN (
-    SELECT dependency FROM package_dependencies
-    WHERE relationship == 'PKGDEP' OR relationship == 'BUILDDEP'
-      OR relationship == 'PKGRECOM'
-    GROUP BY dependency
-  ) revdep
-  ON revdep.dependency = v_packages.name
 WHERE name = ?
 '''
 
@@ -333,7 +327,8 @@ ORDER BY dp.package
 '''
 
 SQL_GET_PACKAGE_REV_REL = '''
-SELECT package, version, relationship
+SELECT
+  package, coalesce(relop, '') || coalesce(version, '') version, relationship
 FROM package_dependencies
 WHERE
   dependency = ? AND (relationship == 'PKGDEP' OR

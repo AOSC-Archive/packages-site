@@ -27,6 +27,9 @@ a:visited {
   color: #242e41;
   text-decoration: underline;
 }
+h2 {
+  margin-bottom: .5em;
+}
 .banner {
   margin: 0;
   color: #333;
@@ -44,7 +47,6 @@ a:visited {
 }
 .package h2 {
   font-size: 1.4em;
-  margin-bottom: .5em;
 }
 .package .pkg-section {
   color: #777;
@@ -68,6 +70,9 @@ table {
   max-width: 100%;
   margin: 1em 0;
 }
+.narrow {
+  width: auto;
+}
 td, th {
   border: 1px solid #ddd;
   padding: .5em;
@@ -81,6 +86,10 @@ tr {
 }
 .table-wrapper {
   overflow: auto;
+  margin: 1em 0;
+}
+.table-wrapper > table {
+  margin: 0 0;
 }
 .packages td, .packages th {
   border-left: none;
@@ -299,6 +308,12 @@ span[title] {
   display: inline-block;
   min-width: 4em;
   margin-top: 0.1em;
+}
+.tab.num {
+  text-align: right;
+}
+th .tab {
+  text-align: right;
 }
 .w45 {
   width: 45%;

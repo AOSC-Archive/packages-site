@@ -56,17 +56,17 @@
     <td class="repo-name">{{ repo['realname'] }}</td>
     {%- endif %}
     <td>
-    <span class="repo-pkgcount tab">
+    <span class="repo-pkgcount tab num">
       <a href="/repo/{{ repo['name'] }}" class="num">{{ repo['pkgcount'] }}</a>
     </span>
-    <span class="repo-ghost tab">
+    <span class="repo-ghost tab num">
       <a href="/ghost/{{ repo['name'] }}" class="num">{{ repo['ghost'] }}</a>
     </span>
-    <span class="repo-lagging tab">
+    <span class="repo-lagging tab num">
       <a href="/lagging/{{ repo['name'] }}" class="num">{{ repo['lagging'] }}</a>
     </span>
     {% if not repo['testing'] and not repo['category'] == "overlay" -%}
-    <span class="repo-missing tab">
+    <span class="repo-missing tab num">
       <a href="/missing/{{ repo['name'] }}" class="num">{{ repo['missing'] }}</a>
     </span>
     {% endif %}
@@ -90,10 +90,10 @@
   <tr>
     <td class="repo-name"><a href="{{ tree['url'] }}">{{ tree['name'] }}</a></td>
     <td class="repo-pkgcount">
-      <span class="repo-pkgcount tab">
+      <span class="repo-pkgcount tab num">
         <a href="/tree/{{ tree['name'] }}" class="num">{{ tree['pkgcount'] }}</a>
       </span>
-      <span class="repo-lagging tab">
+      <span class="repo-lagging tab num">
         <a href="/srcupd/{{ tree['name'] }}" class="num">{{ tree['srcupd'] }}</a>
       </span>
     </td>
