@@ -10,8 +10,6 @@
 <div class="package" id="{{ pkg['name'] }}">
 {% if pkg['tree'] -%}
 <p><b class="pkg-field">Section</b>: {{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}</p>
-{%- else -%}
-<p><b class="pkg-field">Source</b>: (missing)</p>
 {%- endif %}
 {% if pkg['dependency'] -%}
 {% for rel in dep_rel -%}
@@ -29,6 +27,7 @@
 {% if pkg['hasrevdep'] -%}
 <a href="/revdep/{{ pkg['name']|urlencode }}">Reverse dependency</a>,
 {%- endif %}
+<a href="/qa/packages/{{ pkg['name']|urlencode }}">QA Page</a>,
 <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/issues/new?template=bug-report.md&title={{ pkg['name']|urlencode }}%3A%20">Report issues</a></p>
 {% if pkg['srctype'] -%}
 <p><b class="pkg-field" title="auto detected">Upstream</b>:

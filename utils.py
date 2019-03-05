@@ -6,6 +6,7 @@ import re
 import math
 import time
 import weakref
+import colorsys
 import functools
 import collections
 import collections.abc
@@ -23,14 +24,30 @@ def version_compare(a, b):
 version_compare_key = functools.cmp_to_key(version_compare)
 
 def sizeof_fmt(num, suffix='B'):
-    for unit in ['','Ki','Mi','Gi','Ti','Pi','Ei','Zi']:
+    for unit in ('','Ki','Mi','Gi','Ti','Pi','Ei','Zi'):
         if abs(num) < 1024:
             return "%3.1f%s%s" % (num, unit, suffix)
         num /= 1024.0
     return "%.1f%s%s" % (num, 'Yi', suffix)
 
+def sizeof_fmt_ls(num):
+    if abs(num) < 1024:
+        return str(num)
+    num /= 1024.0
+    for unit in 'KMGTPEZ':
+        if abs(num) < 10:
+            return "%3.1f%s" % (num, unit)
+        elif abs(num) < 1024:
+            return "%3.0f%s" % (num, unit)
+        num /= 1024.0
+    return "%.1fY" % num
+
 def strftime(t=None, fmt='%Y-%m-%d %H:%M:%S'):
     return time.strftime(fmt, time.gmtime(t))
+
+def ls_perm(x, ftype='-'):
+    return ftype + ''.join((b if a=='1' else '-')
+        for a, b in zip(bin(x)[2:].zfill(9), 'rwxrwxrwx'))
 
 re_test = re.compile(r'^([@!])\((.+)\)$')
 TestList = collections.namedtuple('TestList', 'op plist')

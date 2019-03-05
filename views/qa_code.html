@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Issue {{ code }}{% if repo %} - {{ repo }}{% endif %} - QA - AOSC OS Packages{% endblock %}
+{% block banner %}<h1>Issue {{ code }}{% if repo %} in repo "{{ repo }}"{% endif %}</h1>
+<p><span class="num">{{ page.count }}</span> package{% if page.count > 1 %}s{% endif %} with Issue {{ code }}: {{ description }}</p>
+{% endblock %}
+{% block main %}
+<table class="packages">
+<thead>
+  <tr>
+    <th>Package</th>
+    <th>Versions</th>
+    <th>Branches</th>
+    <th>Files</th>
+  </tr>
+</thead>
+<tbody>
+{% for pkg in packages -%}
+  <tr>
+  	<td class="pkg-name">
+      <a href="/qa/packages/{{ pkg['name'] }}">{{ pkg['name'] }}</a>
+    </td>
+    <td class="pkg-version pkg-version-dpkg">
+      {% for version in pkg['versions'] -%}
+        {% if loop.index > 1 %}<br>{% endif %}{{ version }}
+      {%- endfor %}
+    </td>
+		<td class="pkg-repo">{% for branch in pkg['branches'] -%}
+        {% if loop.index > 1 %}, {% endif %}{{ branch }}
+      {%- endfor %}
+    </td>
+		<td class="pkg-file">{{ pkg['filename'] }}
+      {% if pkg['filecount'] > 1 -%}… ({{ pkg['filecount'] }} files){%- endif %}
+    </td>
+	</tr>
+{%- endfor %}
+</tbody>
+</table>
+{% include 'pagination.inc.html' %}
+{% endblock main %}

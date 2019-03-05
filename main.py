@@ -13,15 +13,19 @@ import operator
 import textwrap
 import itertools
 import functools
+import contextlib
 import subprocess
 import collections
 
 import jinja2
 import bottle
+import psycopg2
+import psycopg2.extras
 
 import bottle_sqlite
 from utils import cmp, version_compare, version_compare_key, strftime, \
-                  sizeof_fmt, parse_fail_arch, iter_read1, remember, Pager
+                  sizeof_fmt, sizeof_fmt_ls, parse_fail_arch, \
+                  iter_read1, remember, ls_perm, Pager
 
 __version__ = '2.1'
 
@@ -360,6 +364,70 @@ INNER JOIN v_packages vp ON vp.name=q.name
 ORDER BY q.matchcls, q.ftrank, vp.commit_time DESC, q.name
 '''
 
+SQL_ISSUES_STATS_SRC = '''
+SELECT i.repo, i.errno, count(DISTINCT i.package) cnt
+FROM pv_package_issues i
+INNER JOIN tree_branches b ON i.repo=b.name
+INNER JOIN trees t ON t.name=b.tree
+WHERE i.errno < 200 OR i.errno BETWEEN 400 AND 409
+GROUP BY t.tid, b.priority, i.repo, i.errno
+ORDER BY t.tid, b.priority, i.errno
+'''
+
+SQL_ISSUES_STATS_DEB = '''
+SELECT i.repo, i.errno, count(DISTINCT package) cnt
+FROM pv_package_issues i
+INNER JOIN pv_repos r ON i.repo=r.name
+INNER JOIN dpkg_repo_stats s ON s.repo=i.repo
+WHERE i.errno BETWEEN 200 AND 399 OR i.errno >= 410
+GROUP BY r.realname, r.testing, i.repo, i.errno
+ORDER BY r.realname, r.testing, i.errno
+'''
+
+SQL_ISSUES_STATS_UPLOADER = '''
+SELECT
+  max(coalesce(i2.detail->>'committer', p.maintainer)) AS maintainer,
+  count(DISTINCT i.package)::float8/count(DISTINCT p.package) percent
+FROM pv_packages p
+LEFT JOIN pv_package_issues i USING (package, version, repo)
+LEFT JOIN pv_package_issues i2 ON i2.package=p.package
+AND i2.version=p.version AND i2.repo=p.repo AND i2.errno=311
+GROUP BY substring(coalesce(i2.detail->>'committer', p.maintainer)
+  from position('<' in coalesce(i2.detail->>'committer', p.maintainer))+1)
+'''
+
+SQL_ISSUES_RECENT = '''
+SELECT package, version,
+  string_agg(DISTINCT errno::text, ',' ORDER BY errno::text) errs
+FROM pv_package_issues
+WHERE errno!=311
+GROUP BY package, version
+ORDER BY max(mtime) DESC LIMIT 10
+'''
+
+SQL_ISSUES_PACKAGE = '''
+SELECT errno, version, repo, level, filename, detail
+FROM pv_package_issues
+WHERE package=%s
+ORDER BY errno, version DESC, repo, level, filename
+'''
+
+SQL_ISSUES_CODE = '''
+SELECT package "name", array_agg(DISTINCT "version") versions,
+  array_agg(DISTINCT branch) branches, (array_agg(filename))[1] filename,
+  max(filecount) filecount
+FROM (
+  SELECT package, "version",
+    substring(repo from position('/' in repo)+1) branch, max("level") "level",
+    (array_agg(filename))[1] filename, count(filename) filecount
+  FROM pv_package_issues
+  WHERE errno=%s AND coalesce(repo=%s, TRUE)
+  GROUP BY package, version, repo
+) q1
+GROUP BY package
+ORDER BY package
+'''
+
 DEP_REL = collections.OrderedDict((
     ('PKGDEP', 'Depends'),
     ('BUILDDEP', 'Depends (build)'),
@@ -385,6 +453,40 @@ SRC_TYPE = {
     'SVNSRC': 'Subversion',
     'BZRSRC': 'Bazaar'
 }
+ISSUE_CODE = {
+    100: 'Metadata',
+    101: 'Syntax error(s) in spec',
+    102: 'Syntax error(s) in defines',
+    103: 'Package name is not valid',
+    111: 'Package may be out-dated',
+    112: 'SRCTBL uses HTTP',
+    121: 'The last commit message was badly formatted',
+    122: 'Multiple packages changed in the last commit',
+    123: 'Force-pushed recently (last N commit - TBD)',
+    200: 'Build Process',
+    201: 'Failed to get source',
+    202: 'Failed to get dependencies',
+    211: 'Failed to build from source (FTBFS)',
+    221: 'Failed to launch packaged executable(s)',
+    222: 'Feature(s) non-functional, or unit test(s) failed',
+    300: 'Payload (.deb Package)',
+    301: 'Bad or corrupted .deb file',
+    302: '.deb file too small',
+    303: 'Bad .deb filename or storage path',
+    311: 'Bad .deb Maintainer metadata',
+    321: 'File(s) stored in unexpected path(s) in .deb',
+    322: 'Zero-byte file(s) found in .deb',
+    323: 'File(s) with bad owner/group found in .deb',
+    324: 'File(s) with bad permission found in .deb',
+    400: 'Dependencies',
+    401: 'BUILDDEP unmet',
+    402: 'Duplicate package in tree',
+    411: 'PKGDEP unmet',
+    412: 'Duplicate package in repository',
+    421: 'File collision(s)',
+    431: 'Library version (sover) dependency unmet',
+    432: 'Library dependency without PKGDEP',
+}
 REPO_CAT = (('base', None), ('bsp', 'BSP'), ('overlay', 'Overlay'))
 PAGESIZE = 60
 
@@ -393,6 +495,8 @@ RE_FTS5_COLSPEC = re.compile(r'(?<!")(\w*-[\w-]*)(?!")')
 RE_SRCHOST = re.compile(r'^https://(github\.com|bitbucket\.org|gitlab\.com)')
 RE_PYPI = re.compile(r'^https?://pypi\.(python\.org|io)')
 RE_PYPISRC = re.compile(r'^https?://pypi\.(python\.org|io)/packages/source/')
+
+PG_CONN = os.environ.get('PGCONN', '')
 
 application = app = bottle.Bottle()
 plugin = bottle_sqlite.Plugin(
@@ -436,10 +540,17 @@ jinja2_settings = {
     'filters': {
         'strftime': strftime,
         'sizeof_fmt': sizeof_fmt,
-        'fill': textwrap.fill
+        'sizeof_fmt_ls': sizeof_fmt_ls,
+        'fill': textwrap.fill,
+        'ls_perm': ls_perm
     },
     'tests': {
         'blob': lambda x: type(x) == bytes
+    },
+    'globals': {
+        'dep_rel': DEP_REL,
+        'dep_rel_rev': DEP_REL_REV,
+        'issue_code': ISSUE_CODE,
     },
     'autoescape': jinja2.select_autoescape(('html', 'htm', 'xml'))
 }
@@ -451,6 +562,12 @@ isjson = lambda: (
 render = lambda *args, **kwargs: (
     kwargs if isjson() else jinja2_template(*args, **kwargs)
 )
+
+
+def get_pgconn():
+    db = psycopg2.connect(PG_CONN, cursor_factory=psycopg2.extras.DictCursor)
+    db.set_session(readonly=True)
+    return contextlib.closing(db)
 
 
 def gen_trie(wordlist):
@@ -493,7 +610,6 @@ def render_html(**kwargs):
     kvars['updatetime'] = time.gmtime()
     trie = json.dumps(gen_trie(p['name'] for p in kwargs['packages']), separators=',:')
     kvars['packagetrie'] = RE_QUOTES.sub('\\1', trie).replace('{$:0}', '0')
-    kvars['dep_rel'] = DEP_REL
     return template.render(**kvars)
 
 
@@ -519,6 +635,26 @@ def db_trees(db):
     d = collections.OrderedDict((row['name'], dict(row))
         for row in db.execute(SQL_GET_TREES))
     return d
+
+
+@remember(1800)
+def pg_issues():
+    with get_pgconn() as db:
+        cur = db.cursor()
+        cur.execute("SELECT count(DISTINCT package) FROM pv_package_issues")
+        cnt = cur.fetchone()[0]
+        cur.execute(SQL_ISSUES_STATS_SRC)
+        cnt_src = list(map(dict, cur))
+        cur.execute(SQL_ISSUES_STATS_DEB)
+        cnt_deb = list(map(dict, cur))
+        cur.execute(SQL_ISSUES_RECENT)
+        recent = []
+        for row in cur:
+            d = dict(row)
+            d['errs'] = list(map(int, d['errs'].split(',')))
+            recent.append(d)
+        cur.close()
+    return cnt, cnt_src, cnt_deb, recent
 
 
 def makefullver(epoch, version, release):
@@ -679,7 +815,7 @@ def package(name, db):
         else:
             pkg['upstream']['ver_compare'] = VER_REL[
                 version_compare(pkg['version'], res_upstream['version'])]
-    return render('package.html', pkg=pkg, dep_rel=DEP_REL)
+    return render('package.html', pkg=pkg)
 
 @app.route('/changelog/<name>')
 def changelog(name, db):
@@ -709,7 +845,7 @@ def revdep(name, db):
         key=operator.itemgetter('relationship')):
         for row in group:
             revdeps[relationship].append(dict(row))
-    return render('revdep.html', name=name, revdeps=revdeps, dep_rel_rev=DEP_REL_REV)
+    return render('revdep.html', name=name, revdeps=revdeps)
 
 @app.route('/lagging/<repo:path>')
 def lagging(repo, db):
@@ -849,6 +985,135 @@ def repo(repo, db):
             version_compare(latest, fullver) if latest else -1]
         packages.append(d)
     return render('repo.html', repo=repo, packages=packages, page=pagination(res))
+
+
+@app.route('/qa/')
+def qa_index(db):
+    tree_branches = {r[0]:r[1:] for r in
+        db.execute("SELECT name, tree, branch FROM tree_branches")}
+    repos = db_repos(db)
+    total = sum(r['pkgcount'] for r in db_trees(db).values())
+    numissues, cnt_src, cnt_deb, recent = pg_issues()
+    srclist = {repo: {r['errno']:r['cnt'] for r in group} for repo, group in
+        itertools.groupby(cnt_src, key=operator.itemgetter('repo'))}
+    srcissues = sorted(functools.reduce(set.union,
+        (r.keys() for r in srclist.values()), set()))
+    srcissues_matrix = [tree_branches[t] +
+        ([srclist[t].get(err, 0) for err in srcissues]
+        if t in srclist else [0]*len(srcissues),) for t in tree_branches]
+    srcissues_max = max(max(row[-1]) for row in srcissues_matrix)
+    deblist = {repo: {r['errno']:r['cnt'] for r in group} for repo, group in
+        itertools.groupby(cnt_deb, key=operator.itemgetter('repo'))}
+    debissues = sorted(functools.reduce(set.union,
+        (r.keys() for r in deblist.values()), set()))
+    debissues_matrix = [(repos[r]['realname'], repos[r]['branch'],
+        [deblist[r].get(err, 0) for err in debissues]
+        if r in deblist else [0]*len(debissues)) for r in repos]
+    debissues_max = max(max(row[-1]) for row in debissues_matrix)
+    return render('qa_index.html', total=numissues,
+                  percent=(100*numissues/total), recent=recent,
+                  srcissues_key=srcissues, debissues_key=debissues,
+                  srcissues_matrix=srcissues_matrix,
+                  debissues_matrix=debissues_matrix,
+                  srcissues_max=srcissues_max,
+                  debissues_max=debissues_max,
+                  codes=ISSUE_CODE)
+
+
+@app.route('/qa/code/')
+def qa_codedef():
+    bottle.redirect(
+        "https://wiki.aosc.io/developers/list-of-package-issue-codes", 303)
+
+
+@app.route('/qa/code/<code>')
+@app.route('/qa/code/<code>/<repo:path>')
+def qa_code(db, code, repo=None):
+    try:
+        code = int(code)
+        desc = ISSUE_CODE[code]
+    except (ValueError, KeyError) as e:
+        return bottle.HTTPResponse(render('error.html',
+                error='Issue code "%s" not found.' % repo), 404)
+    if repo:
+        res = db.execute(
+            'SELECT name FROM dpkg_repos WHERE name=? UNION ALL '
+            'SELECT name FROM tree_branches WHERE name=?', (repo, repo)
+            ).fetchone()
+        if res is None:
+            return bottle.HTTPResponse(render('error.html',
+                error='Repo "%s" not found.' % repo), 404)
+    page, pagesize = get_page()
+    results = []
+    with get_pgconn() as pgdb:
+        cur = pgdb.cursor()
+        cur.execute(SQL_ISSUES_CODE, (code, repo))
+        res = Pager(cur, pagesize, page)
+        results = list(map(dict, res))
+        page = pagination(res)
+    return render('qa_code.html', code=code, repo=repo, description=desc,
+                  packages=results, page=page)
+
+
+@app.route('/qa/packages/<name>')
+def qa_package(name, db):
+    name = name.strip()
+    res = db.execute(SQL_GET_PACKAGE_INFO, (name,)).fetchone()
+    pkgintree = True
+    if res is None:
+        res = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (name,)).fetchone()
+        pkgintree = False
+    if res is None:
+        return bottle.HTTPResponse(render('error.html',
+                error='Package "%s" not found.' % name), 404)
+    pkg = dict(res)
+    dep_dict = {}
+    if pkg['dependency']:
+        for dep in pkg['dependency'].split(','):
+            dep_pkg, dep_ver, dep_rel = dep.split('|')
+            if dep_rel in dep_dict:
+                dep_dict[dep_rel].append((dep_pkg, dep_ver))
+            else:
+                dep_dict[dep_rel] = [(dep_pkg, dep_ver)]
+    pkg['dependency'] = dep_dict
+    pkg['versions'] = list(map(dict, db.execute(
+        SQL_GET_PACKAGE_VERSIONS, (name,)).fetchall()))
+    contents = collections.defaultdict(lambda: collections.defaultdict(list))
+    issues = []
+    with get_pgconn() as pgdb:
+        cur = pgdb.cursor()
+        cur.execute(SQL_ISSUES_PACKAGE, (name,))
+        # errno, version, repo, level, filename, detail
+        for errno, egroup in itertools.groupby(cur, key=operator.itemgetter(0)):
+            keys = []
+            values = []
+            uniqdict = {}
+            secid = 0
+            for version_repo, rgroup in itertools.groupby(egroup,
+                key=operator.itemgetter(1, 2)):
+                repo_result = tuple((r['level'], r['filename'], r['detail'])
+                    for r in rgroup)
+                repo_hash = tuple(map(operator.itemgetter(0, 1), repo_result))
+                result_id = uniqdict.get(repo_hash)
+                if result_id is None:
+                    keys.append([version_repo])
+                    values.append(repo_result)
+                    uniqdict[repo_hash] = secid
+                    secid += 1
+                else:
+                    keys[result_id].append(version_repo)
+            del uniqdict
+            issues.append({'errno': errno, 'examples': [
+                {'keys': k, 'files': v[:100], 'filecount': len(v)}
+                for k, v in zip(keys, values)
+            ]})
+    return render('qa_package.html', pkg=pkg, issues=issues, codes=ISSUE_CODE)
+
+
+@app.route('/qa/rebuild/')
+def qa_rebuild():
+    return render('qa_index.html')
+
 
 _debcompare_key = functools.cmp_to_key(lambda a, b:
     (version_compare(a['version'], b['version'])

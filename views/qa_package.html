@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ pkg['name'] }} - QA - AOSC OS Packages{% endblock %}
+{% block banner %}<h1>{{ pkg['name'] }}
+{% if pkg['version'] %}<span class="pkg-version">{{ pkg['version'] }}</span>{% if pkg['release'] %}-<span class="pkg-version pkg-release">{{ pkg['release'] }}</span>{% endif %}{% endif %}
+</h1>
+<p><a href="/packages/{{ pkg['name'] }}">← Back to package details</a></p>
+{% endblock %}
+
+{% block main %}
+<div class="package" id="{{ pkg['name'] }}">
+{% if pkg['tree'] -%}
+<p><b class="pkg-field">Section</b>: {{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}</p>
+{%- endif %}
+{% if pkg['dependency'] -%}
+{% for rel in dep_rel -%}
+{% if rel in pkg['dependency'] -%}<p>
+<b class="pkg-field pkg-dep-rel">{{ dep_rel[rel] }}</b>:
+{% for dep in pkg['dependency'][rel] -%}
+{% if loop.index != 1 %},{% endif %}
+<span class="pkg-dep"><a href="{{ dep[0] }}">{{ dep[0] }}</a>{{ dep[1] }}</span>
+{%- endfor %}
+</p>{%- endif %}
+{%- endfor %}
+{%- endif %}
+<p><b class="pkg-field">Links</b>:
+<a href="/changelog/{{ pkg['name']|urlencode }}">Changelog</a>,
+<a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/issues/new?template=bug-report.md&title={{ pkg['name']|urlencode }}%3A%20">Report issues</a></p>
+{% for issue in issues %}
+<h2 id="{{ issue['errno'] }}" class="pkg-issue">Issue {{ issue['errno'] }}</h2>
+<p class="pkg-issue-desc">{{ issue_code[issue['errno']] }}</p>
+{% for e in issue['examples'] %}
+<h3 id="{{ issue['errno'] }}-{{ loop.index }}">{{ e['keys'][0][0] }} ({{ e['keys'][0][1] }})</h3>
+{% if e['keys']|length > 1 %}
+<p><b class="pkg-field">Also</b>: {% for i in range(e['keys']|length-1) %}
+{% if loop.index > 1 %}, {% endif %}{{ e['keys'][i+1][0] }}
+({{ e['keys'][i+1][1] }}){% endfor %}</p>
+{% endif %}
+{% if issue['errno'] in [101, 102] %}
+<p><b class="pkg-field">File</b>: {{ e['files'][0][1] }}</p>
+<p><b class="pkg-field">Commit</b>: <a href="https://github.com/AOSC-Dev/{{ e['files'][0][2]['tree'] }}/commit/{{ e['files'][0][2]['githash'] }}">{{ e['files'][0][2]['githash'] }}</a></p>
+<p><b class="pkg-field">Error</b>: </p>
+<pre>{{ e['files'][0][2]['err']|e }}</pre>
+{% elif issue['errno'] == 103 %}
+<p><b class="pkg-field">Name</b>: {{ pkg['name'] }}</p>
+<p><b class="pkg-field">Explanation</b>: Package names must consist only of lower case letters (a-z), digits (0-9), plus (+) and minus (-) signs, and periods (.). They must be at least two characters long and must start with an alphanumeric character.</p>
+{% elif issue['errno'] == 301 %}
+<p><b class="pkg-field">File</b>: <a href="https://repo.aosc.io/debs/{{ e['files'][0][1] }}">{{ e['files'][0][1] }}</a></p>
+<p><b class="pkg-field">Size</b>: {{ e['files'][0][2]['size']|sizeof_fmt }}</p>
+{% elif issue['errno'] == 302 %}
+<p><b class="pkg-field">File</b>: <a href="https://repo.aosc.io/debs/{{ e['files'][0][1] }}">{{ e['files'][0][1] }}</a></p>
+<p><b class="pkg-field">Size</b>: {{ e['files'][0][2]['size']|sizeof_fmt }}</p>
+<p><b class="pkg-field">Median size</b>: {{ e['files'][0][2]['medsize']|sizeof_fmt }}</p>
+{% elif issue['errno'] == 303 %}
+<p><b class="pkg-field">File</b>: <a href="https://repo.aosc.io/debs/{{ e['files'][0][1] }}">{{ e['files'][0][1] }}</a></p>
+<p><b class="pkg-field">Should be</b>: {{ e['files'][0][2]['suggestion'] }}</p>
+{% elif issue['errno'] == 311 %}
+<p><b class="pkg-field">Maintainer</b>: {{ e['files'][0][2]['maintainer']|replace('@', '<span class="email"></span>'|safe) }}</p>
+<p><b class="pkg-field">Committer</b>: <a href="https://github.com/AOSC-Dev/{{ e['files'][0][2]['tree'] }}/commit/{{ e['files'][0][2]['githash'] }}">{{ e['files'][0][2]['committer']|d('(not found)')|replace('@', '<span class="email"></span>'|safe) }}</a></p>
+{% elif issue['errno'] > 320 and issue['errno'] < 330 %}
+<p><b class="pkg-field">{{ e['filecount'] }} File{% if e['filecount'] > 1 %}s{% endif %}</b></p>
+<ul class="pkg-files">
+{% for file in e['files'] %}
+<li><span class="pkg-ls-perm{% if file[0] < 0 %} pkg-issue-crit{% endif %}">{{ file[2]['perm']|ls_perm }}</span> <span class="pkg-ls-user">{{ file[2]['uname'] }}({{ file[2]['uid'] }})</span> <span class="pkg-ls-user">{{ file[2]['gname'] }}({{ file[2]['gid'] }})</span> <span class="pkg-ls-size num">{{ file[2]['size']|sizeof_fmt_ls }}</span> {{ file[1] }}</li>
+{%- endfor %}
+{% if e['files']|length < e['filecount'] %}
+<li>&hellip;</li>
+{% endif %}
+</ul>
+{% else %}
+<ul>
+{% for file in e['files'] %}
+<li>{{ file[1] }}: {{ file[2] }}</li>
+{%- endfor %}
+</ul>
+<p>({{ e['filecount'] }} files)</p>
+{% endif %}
+
+{%- endfor %}
+{%- endfor %}
+</div>
+{% endblock main %}

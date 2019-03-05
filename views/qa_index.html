@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}QA - AOSC OS Packages{% endblock %}
+{% block extraheader -%}
+<link rel="canonical" href="https://packages.aosc.io/qa/">
+{%- endblock %}
+{% block banner %}<h1>Package Quality Assurance</h1>
+<p>There are <span class="num">{{ total }}</span> (<span class="num">{{ '%.2f'|format(percent) }}</span>%) package{% if total > 1 %}s{% endif %} with problems.</p>
+{% endblock %}
+{% block main %}
+<h2>Recent Unresolved Problems</h2>
+<table class="packages narrow">
+<tbody>
+{% for pkg in recent -%}
+  <tr>
+    <td class="pkg-name">
+      <a href="/qa/packages/{{ pkg['package'] }}">{{ pkg['package'] }}</a>
+    </td>
+    <td class="pkg-version">{{ pkg['version'] }}</td>
+    <td class="pkg-description">{% for code in pkg['errs'] %}
+      <a href="/qa/packages/{{ pkg['package'] }}#{{ code }}" title="{{ issue_code[code] }}">{{ code }}</a>
+    {%- endfor %}</td>
+  </tr>
+{%- endfor %}
+</tbody>
+</table>
+
+<h2>Problems in Source Trees</h2>
+<div class="table-wrapper">
+<table class="packages narrow">
+<thead>
+<tr>
+  <th><span>Tree</span></th>
+  <th><span>Branch</span></th>
+  {% for code in srcissues_key -%}
+  <th class="num"><span title="{{ issue_code[code] }}">
+    <a href="code/{{ code }}">{{ code }}</a></span></th>
+  {%- endfor %}
+</tr>
+</thead>
+<tbody>
+{% for row in srcissues_matrix -%}
+  <tr class="repo-row">
+    <td>{{ row[0] }}</td>
+    <td>{{ row[1] }}</td>
+    {% for col in row[2] -%}
+    <td class="repo-pkgcount num"{% if srcissues_max and col %} style="background-color:hsl(17,100%,{{ '%d'|format(100-100/3*col/srcissues_max) }}%)"{% endif %}>{% if col -%}
+      <a href="code/{{ srcissues_key[loop.index0] }}/{{ row[0] }}/{{ row[1] }}">{{ col }}</a>
+    {%- else %}{{ col }}{% endif %}</td>
+    {%- endfor %}
+  </tr>
+{%- endfor %}
+</tbody>
+</table>
+</div>
+
+<h2>Problems in Binary Packages</h2>
+<div class="table-wrapper">
+<table class="packages">
+<thead>
+<tr>
+  <th><span>Repository</span></th>
+  <th><span>Branch</span></th>
+  {% for code in debissues_key -%}
+  <th class="num"><span title="{{ issue_code[code] }}">
+    <a href="code/{{ code }}">{{ code }}</a></span></th>
+  {%- endfor %}
+</tr>
+</thead>
+<tbody>
+{% for row in debissues_matrix -%}
+  <tr class="repo-row">
+    <td>{{ row[0] }}</td>
+    <td>{{ row[1] }}</td>
+    {% for col in row[2] -%}
+      <td class="repo-pkgcount num"{% if srcissues_max and col %} style="background-color:hsl(17,100%,{{ '%d'|format(100-100/3*col/debissues_max) }}%)"{% endif %}>{% if col -%}
+      <a href="code/{{ debissues_key[loop.index0] }}/{{ row[0] }}/{{ row[1] }}">{{ col }}</a>
+    {%- else %}{{ col }}{% endif %}</td>
+    {%- endfor %}
+  </tr>
+{%- endfor %}
+</tbody>
+</table>
+</div>
+{% endblock main %}
