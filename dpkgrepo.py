@@ -153,6 +153,7 @@ def init_db(db):
                 'ghostcnt INTEGER,'
                 'laggingcnt INTEGER,'
                 'missingcnt INTEGER,'
+                'oldcnt INTEGER,'
                 'FOREIGN KEY(repo) REFERENCES dpkg_repos(name)'
                 ')')
     cur.execute("DROP VIEW IF EXISTS v_dpkg_packages_new")
@@ -328,16 +329,29 @@ def package_update(db, repo, path, size, sha256):
 
 SQL_COUNT_REPO = '''
 REPLACE INTO dpkg_repo_stats
-SELECT c1.repo repo, pkgcount, ghost, lagging, missing
+SELECT c1.repo repo, pkgcount, ghost, lagging, missing, olddebcnt
 FROM (
 SELECT
   dpkg_repos.name repo, dpkg_repos.realname reponame,
   dpkg_repos.testing testing, dpkg_repos.category category,
-  count(packages.name) pkgcount,
-  (CASE WHEN count(packages.name)
-   THEN sum(CASE WHEN packages.name IS NULL THEN 1 ELSE 0 END)
-   ELSE 0 END) ghost
+  count(CASE WHEN ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
+    THEN packages.name ELSE NULL END) pkgcount,
+  (CASE WHEN sum((
+    (spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
+    AND packages.name IS NOT NULL)
+   THEN sum(((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
+    AND packages.name IS NULL)
+   ELSE 0 END) ghost,
+  sum(dpnew.package IS NULL OR packages.name IS NULL
+    OR ((dpkg_repos.architecture = 'noarch') = (spabhost.value IS NOT 'noarch')
+    AND dparch.package IS NULL)) + dpkg_dup.cnt olddebcnt
 FROM dpkg_repos
+LEFT JOIN dpkg_packages dp ON dpkg_repos.name=dp.repo
+LEFT JOIN (
+  SELECT package, max(version COLLATE vercomp) version, architecture, repo
+  FROM dpkg_packages
+  GROUP BY package, architecture, repo
+) dpnew USING (package, version, architecture, repo)
 LEFT JOIN (
     SELECT DISTINCT dp.package, dp.repo, dr.realname reponame, dr.architecture
     FROM dpkg_packages dp
@@ -348,6 +362,18 @@ LEFT JOIN packages
   ON packages.name = dpkg.package
 LEFT JOIN package_spec spabhost
   ON spabhost.package = packages.name AND spabhost.key = 'ABHOST'
+LEFT JOIN (
+  SELECT dp.package, (dr.architecture = 'noarch') noarch,
+    max(dp.version COLLATE vercomp) version
+  FROM dpkg_packages dp
+  INNER JOIN dpkg_repos dr ON dr.name=dp.repo
+  GROUP BY dp.package, (dr.architecture = 'noarch')
+) dparch ON dparch.package=dp.package
+AND (dpkg_repos.architecture != 'noarch') = dparch.noarch
+AND dparch.version=dpnew.version
+LEFT JOIN (
+  SELECT repo, count(*) cnt FROM dpkg_package_duplicate GROUP BY repo
+) dpkg_dup
 WHERE packages.name IS NULL
 OR ((spabhost.value IS 'noarch') = (dpkg.architecture IS 'noarch'))
 GROUP BY dpkg_repos.name
