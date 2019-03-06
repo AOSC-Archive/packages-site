@@ -273,59 +273,67 @@ ORDER BY pkgcount DESC
 '''
 
 SQL_GET_DEB_LIST_HASARCH = '''
-SELECT
-  dp.package package, dp.version version, repo, filename,
-  (spabhost.value IS 'noarch') noarch,
-  (packages.name IS NULL) outoftree,
-  dpnoarch.versions noarchver
-FROM (
-  SELECT package, version, repo, filename FROM dpkg_packages
-  UNION
-  SELECT package, version, repo, filename FROM dpkg_package_duplicate
-) dp
+SELECT dp.filename, rtrim(
+  CASE WHEN dpnew.package IS NULL THEN 'old,' ELSE '' END ||
+  CASE WHEN packages.name IS NULL THEN 'outoftree,' ELSE '' END ||
+  CASE WHEN (spabhost.value IS 'noarch' AND dpnoarch.package IS NULL)
+    THEN 'noarch' ELSE '' END, ',') removereason
+FROM dpkg_packages dp
+LEFT JOIN (
+  SELECT package, max(version COLLATE vercomp) version
+  FROM dpkg_packages
+  WHERE repo = ?
+  GROUP BY package
+) dpnew USING (package, version)
 LEFT JOIN packages ON packages.name = dp.package
 LEFT JOIN package_spec spabhost
   ON spabhost.package = dp.package AND spabhost.key = 'ABHOST'
 LEFT JOIN (
-    SELECT
-      dp.package,
-      group_concat(dp.version) versions
-    FROM dpkg_packages dp
-    INNER JOIN dpkg_repos dr ON dr.name=dp.repo
-    WHERE dr.architecture = 'noarch'
-    GROUP BY dp.package
-  ) dpnoarch
-  ON dpnoarch.package = dp.package
-WHERE repo = ?
-ORDER BY dp.package
+  SELECT dp.package, max(dp.version COLLATE vercomp) version
+  FROM dpkg_packages dp
+  INNER JOIN dpkg_repos dr ON dr.name=dp.repo
+  WHERE dr.architecture = 'noarch'
+  GROUP BY dp.package
+) dpnoarch ON dpnoarch.package=dp.package
+AND dpnoarch.version=dpnew.version
+WHERE (dpnew.package IS NULL OR packages.name IS NULL
+OR (spabhost.value IS 'noarch' AND dpnoarch.package IS NULL))
+AND dp.repo=?
+UNION ALL
+SELECT filename, 'dup' removereason FROM dpkg_package_duplicate WHERE repo=?
+ORDER BY filename
 '''
 
 SQL_GET_DEB_LIST_NOARCH = '''
-SELECT
-  dp.package package, dp.version version, repo, filename,
-  (spabhost.value IS 'noarch') noarch,
-  (packages.name IS NULL) outoftree,
-  dparch.versions hasarchver
-FROM (
-  SELECT package, version, repo, filename FROM dpkg_packages
-  UNION
-  SELECT package, version, repo, filename FROM dpkg_package_duplicate
-) dp
+SELECT dp.filename, rtrim(
+  CASE WHEN dpnew.package IS NULL THEN 'old,' ELSE '' END ||
+  CASE WHEN packages.name IS NULL THEN 'outoftree,' ELSE '' END ||
+  CASE WHEN (spabhost.value IS NOT 'noarch' AND dphasarch.package IS NULL)
+    THEN 'hasarch' ELSE '' END, ',') removereason
+FROM dpkg_packages dp
+LEFT JOIN (
+  SELECT package, max(version COLLATE vercomp) version
+  FROM dpkg_packages
+  WHERE repo = ?
+  GROUP BY package
+) dpnew USING (package, version)
 LEFT JOIN packages ON packages.name = dp.package
 LEFT JOIN package_spec spabhost
   ON spabhost.package = dp.package AND spabhost.key = 'ABHOST'
 LEFT JOIN (
-    SELECT
-      dp.package,
-      group_concat(dp.version) versions
-    FROM dpkg_packages dp
-    INNER JOIN dpkg_repos dr ON dr.name=dp.repo
-    WHERE dr.architecture != 'noarch'
-    GROUP BY dp.package
-  ) dparch
-  ON dparch.package = dp.package
-WHERE repo = ?
-ORDER BY dp.package
+  SELECT dp.package, max(dp.version COLLATE vercomp) version
+  FROM dpkg_packages dp
+  INNER JOIN dpkg_repos dr ON dr.name=dp.repo
+  WHERE dr.architecture != 'noarch'
+  GROUP BY dp.package
+) dphasarch ON dphasarch.package=dp.package
+AND dphasarch.version=dpnew.version
+WHERE (dpnew.package IS NULL OR packages.name IS NULL
+OR (spabhost.value IS NOT 'noarch' AND dphasarch.package IS NULL))
+AND dp.repo=?
+UNION ALL
+SELECT filename, 'dup' removereason FROM dpkg_package_duplicate WHERE repo=?
+ORDER BY filename
 '''
 
 SQL_GET_PACKAGE_REV_REL = '''
@@ -382,16 +390,18 @@ GROUP BY r.realname, r.testing, i.repo, i.errno
 ORDER BY r.realname, r.testing, i.errno
 '''
 
-SQL_ISSUES_STATS_UPLOADER = '''
-SELECT
-  max(coalesce(i2.detail->>'committer', p.maintainer)) AS maintainer,
-  count(DISTINCT i.package)::float8/count(DISTINCT p.package) percent
-FROM pv_packages p
-LEFT JOIN pv_package_issues i USING (package, version, repo)
-LEFT JOIN pv_package_issues i2 ON i2.package=p.package
-AND i2.version=p.version AND i2.repo=p.repo AND i2.errno=311
-GROUP BY substring(coalesce(i2.detail->>'committer', p.maintainer)
-  from position('<' in coalesce(i2.detail->>'committer', p.maintainer))+1)
+SQL_ISSUES_OLD_DEB = '''
+SELECT reop, count(repo) cnt
+FROM (
+  SELECT p.repo
+  FROM pv_packages p
+  LEFT JOIN v_packages_new n USING (package, version, repo)
+  LEFT JOIN packages s ON s.name=p.package
+  WHERE n.package IS NULL OR s.name IS NULL
+  UNION ALL
+  SELECT repo FROM pv_package_duplicate
+) q
+GROUP BY repo
 '''
 
 SQL_ISSUES_RECENT = '''
@@ -1002,6 +1012,7 @@ def qa_index(db):
         db.execute("SELECT name, tree, branch FROM tree_branches")}
     repos = db_repos(db)
     total = sum(r['pkgcount'] for r in db_trees(db).values())
+    olddebs = dict(db.execute("SELECT repo, oldcnt FROM dpkg_repo_stats"))
     numissues, cnt_src, cnt_deb, recent = pg_issues()
     srclist = {repo: {r['errno']:r['cnt'] for r in group} for repo, group in
         itertools.groupby(cnt_src, key=operator.itemgetter('repo'))}
@@ -1020,7 +1031,7 @@ def qa_index(db):
         if r in deblist else [0]*len(debissues)) for r in repos]
     debissues_max = max(max(row[-1]) for row in debissues_matrix)
     return render('qa_index.html', total=numissues,
-                  percent=(100*numissues/total), recent=recent,
+                  percent=(100*numissues/total), recent=recent, olddebs=olddebs,
                   srcissues_key=srcissues, debissues_key=debissues,
                   srcissues_matrix=srcissues_matrix,
                   debissues_matrix=debissues_matrix,
@@ -1132,13 +1143,8 @@ _debcompare_key = functools.cmp_to_key(lambda a, b:
 
 @app.route('/cleanmirror/<repo:path>')
 def cleanmirror(repo, db):
-    try:
-        retain = int(bottle.request.query.get('retain', 0))
-    except ValueError:
-        retain = 0
     reason = bottle.request.query.get('reason')
     reason = frozenset(reason.split(',')) if reason else None
-    getall = bool(bottle.request.query.get('all'))
 
     repos = db_repos(db)
     if repo not in repos:
@@ -1146,44 +1152,14 @@ def cleanmirror(repo, db):
                 error='Repo "%s" not found.' % repo), 404,
                 content_type='text/plain; charset=UTF-8')
     debs = []
-    for package, group in itertools.groupby(
-            db.execute(SQL_GET_DEB_LIST_HASARCH
-                if repo != 'noarch' else SQL_GET_DEB_LIST_NOARCH, (repo,)),
-            key=operator.itemgetter('package')):
-        debgroup = sorted(map(dict, group), key=_debcompare_key)
-        latest = debgroup[-1]
-        latestver = latest['version']
-        if retain:
-            debgroup = debgroup[:-retain]
-            if not debgroup:
-                continue
-        for deb in debgroup:
-            removereason = []
-            if deb['version'] != latestver:
-                removereason.append('old')
-            elif deb['filename'] != latest['filename']:
-                removereason.append('dup')
-            if deb['outoftree']:
-                removereason.append('outoftree')
-            elif repo != 'noarch':
-                if (deb['noarch'] and deb['noarchver']
-                    and utils.version_compare(deb['version'],
-                        max(deb['noarchver'].split(','),
-                        key=utils.version_compare_key)) < 0):
-                    if 'old' not in removereason:
-                        removereason.append('old')
-                    removereason.append('noarch')
-            elif (not deb['noarch'] and deb['hasarchver']
-                  and utils.version_compare(deb['version'],
-                      max(deb['hasarchver'].split(','),
-                      key=utils.version_compare_key)) < 0):
-                removereason.append('hasarch')
-            deb['removereason'] = removereason
-            if reason:
-                if reason.intersection(frozenset(removereason)):
-                    debs.append(deb)
-            elif getall or removereason:
-                debs.append(deb)
+    for row in db.execute(SQL_GET_DEB_LIST_HASARCH
+        if repos[repo]['realname'] != 'noarch'
+        else SQL_GET_DEB_LIST_NOARCH, (repo,)*3):
+        removereason = row['removereason'].split(',')
+        if reason is None or reason.intersection(frozenset(removereason)):
+            d = dict(row)
+            d['removereason'] = removereason
+            debs.append(d)
     bottle.response.content_type = 'text/plain; charset=UTF-8'
     return render('cleanmirror.txt', repo=repo, packages=debs)
 
