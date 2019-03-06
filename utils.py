@@ -7,6 +7,7 @@ import math
 import time
 import weakref
 import colorsys
+import itertools
 import functools
 import collections
 import collections.abc
@@ -45,8 +46,10 @@ def sizeof_fmt_ls(num):
 def strftime(t=None, fmt='%Y-%m-%d %H:%M:%S'):
     return time.strftime(fmt, time.gmtime(t))
 
-def ls_perm(x, ftype='-'):
-    return ftype + ''.join((b if a=='1' else '-')
+def ls_perm(x, ftype='reg'):
+    return {'reg': '-', 'lnk': 'l', 'sock': 's', 'chr': 'c', 'blk': 'b', 
+        'dir': 'd', 'fifo': 'p'}.get(ftype, '-') + ''.join(
+        (b if a=='1' else '-')
         for a, b in zip(bin(x)[2:].zfill(9), 'rwxrwxrwx'))
 
 re_test = re.compile(r'^([@!])\((.+)\)$')
@@ -82,6 +85,25 @@ def remember(ttl):
         wrapper.cached_value = None
         return wrapper
     return deco
+
+def groupby_val(iterable, key=None, resultkey=None, resultcmpkey=None):
+    keys = []
+    values = []
+    uniqdict = {}
+    resid = 0
+    for groupkey, rgroup in itertools.groupby(iterable, key=key):
+        result = tuple(map(resultkey, rgroup))
+        result_hash = tuple(map(resultcmpkey, result))
+        result_id = uniqdict.get(result_hash)
+        if result_id is None:
+            keys.append([groupkey])
+            values.append(result)
+            uniqdict[result_hash] = resid
+            resid += 1
+        else:
+            keys[result_id].append(groupkey)
+    del uniqdict
+    return keys, values
 
 class FileRemover(object):
     def __init__(self):

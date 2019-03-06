@@ -212,6 +212,21 @@ class TestWebsite(unittest.TestCase):
                 self.assertEqual(req.status_code, 404)
                 req.close()
 
+    def test_qa_listnumber(self):
+        req = requests.get(URLBASE + '/qa/?type=json')
+        req.raise_for_status()
+        d = req.json()
+        req.close()
+        for rtype in ('src', 'deb'):
+            for repo, branch, row in d[rtype + 'issues_matrix']:
+                for k, v in zip(d[rtype + 'issues_key'], row):
+                    req = requests.get('%s/qa/code/%s/%s/%s?type=json' % (
+                                       URLBASE, k, repo, branch))
+                    req.raise_for_status()
+                    dl = req.json()
+                    self.assertEqual(
+                        dl["page"]["count"], v, '%s: %s/%s' % (k, repo, branch))
+
     def test_api_version(self):
         req = requests.get(URLBASE + '/api_version')
         req.raise_for_status()

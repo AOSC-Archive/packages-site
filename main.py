@@ -22,12 +22,10 @@ import bottle
 import psycopg2
 import psycopg2.extras
 
+import utils
 import bottle_sqlite
-from utils import cmp, version_compare, version_compare_key, strftime, \
-                  sizeof_fmt, sizeof_fmt_ls, parse_fail_arch, \
-                  iter_read1, remember, ls_perm, Pager
 
-__version__ = '2.1'
+__version__ = '3.0'
 
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
@@ -406,9 +404,20 @@ ORDER BY max(mtime) DESC LIMIT 10
 '''
 
 SQL_ISSUES_PACKAGE = '''
-SELECT errno, version, repo, level, filename, detail
-FROM pv_package_issues
-WHERE package=%s
+SELECT errno, version, repo, filecount, level, filename, detail
+FROM (
+  SELECT errno, version, repo, level, filename, detail,
+    max(rowid) OVER (PARTITION BY errno, version, repo) filecount, rowid
+  FROM (
+    SELECT errno, version, repo, level, filename, detail,
+      count(*) OVER (PARTITION BY errno, version, repo) filecount,
+      row_number() OVER (
+        PARTITION BY errno, version, repo ORDER BY level, filename) rowid
+    FROM pv_package_issues
+    WHERE package=%s
+  ) q1
+) q2
+WHERE rowid <= 500
 ORDER BY errno, version DESC, repo, level, filename
 '''
 
@@ -503,7 +512,7 @@ plugin = bottle_sqlite.Plugin(
     dbfile='data/abbs.db',
     readonly=True,
     extensions=('./mod_vercomp.so',)
-    # collations={'vercomp': version_compare}
+    # collations={'vercomp': utils.version_compare}
 )
 app.install(plugin)
 
@@ -538,11 +547,11 @@ def response_lm(f_body=None, status=None, headers=None, modified=None, etag=None
 
 jinja2_settings = {
     'filters': {
-        'strftime': strftime,
-        'sizeof_fmt': sizeof_fmt,
-        'sizeof_fmt_ls': sizeof_fmt_ls,
+        'strftime': utils.strftime,
+        'sizeof_fmt': utils.sizeof_fmt,
+        'sizeof_fmt_ls': utils.sizeof_fmt_ls,
         'fill': textwrap.fill,
-        'ls_perm': ls_perm
+        'ls_perm': utils.ls_perm
     },
     'tests': {
         'blob': lambda x: type(x) == bytes
@@ -603,7 +612,7 @@ def pagination(pager):
 def render_html(**kwargs):
     jinjaenv = jinja2.Environment(loader=jinja2.FileSystemLoader(
         os.path.normpath(os.path.join(os.path.dirname(__file__), 'templates'))))
-    jinjaenv.filters['strftime'] = (
+    jinjaenv.filters['utils.strftime'] = (
         lambda t, f='%Y-%m-%dT%H:%M:%SZ': time.strftime(f, t))
     template = jinjaenv.get_template(kwargs.get('template', 'template.html'))
     kvars = kwargs.copy()
@@ -613,7 +622,7 @@ def render_html(**kwargs):
     return template.render(**kvars)
 
 
-@remember(3600)
+@utils.remember(3600)
 def db_last_modified(db):
     row = db.execute('SELECT commit_time FROM package_versions '
                      'ORDER BY commit_time DESC LIMIT 1').fetchone()
@@ -623,13 +632,13 @@ def db_last_modified(db):
         return 0
 
 
-@remember(1800)
+@utils.remember(1800)
 def db_repos(db):
     return collections.OrderedDict((row['name'], dict(row))
         for row in db.execute(SQL_GET_REPO_COUNT))
 
 
-@remember(1800)
+@utils.remember(1800)
 def db_trees(db):
     db.execute(SQL_ATTACH_PISS)
     d = collections.OrderedDict((row['name'], dict(row))
@@ -637,7 +646,7 @@ def db_trees(db):
     return d
 
 
-@remember(1800)
+@utils.remember(1800)
 def pg_issues():
     with get_pgconn() as db:
         cur = db.cursor()
@@ -706,7 +715,7 @@ def search(db):
             '&lt;b&gt;', '<b>').replace('&lt;/b&gt;', '</b>')
         d['name_highlight'] = html.escape(d['name']).replace(q, '<b>%s</b>' % q)
         packages.append(d)
-    res = Pager(packages, pagesize, page)
+    res = utils.Pager(packages, pagesize, page)
     return render('search.html', q=q, packages=list(res), page=pagination(res))
 
 @app.route('/query/', method=('GET', 'POST'))
@@ -763,10 +772,10 @@ def package(name, db):
             if ver not in ver_list:
                 ver_list.append(ver)
         dpkg_dict[repo] = table_row
-    ver_list.sort(key=version_compare_key, reverse=True)
+    ver_list.sort(key=utils.version_compare_key, reverse=True)
     if pkgintree and fullver and fullver not in ver_list:
         ver_list.insert(0, fullver)
-    fail_arch = parse_fail_arch(pkg['fail_arch'])
+    fail_arch = utils.parse_fail_arch(pkg['fail_arch'])
     if pkg['noarch']:
         reponames = ['noarch']
     elif pkg['tree_category']:
@@ -814,7 +823,7 @@ def package(name, db):
             pkg['upstream']['ver_compare'] = 'same'
         else:
             pkg['upstream']['ver_compare'] = VER_REL[
-                version_compare(pkg['version'], res_upstream['version'])]
+                utils.version_compare(pkg['version'], res_upstream['version'])]
     return render('package.html', pkg=pkg)
 
 @app.route('/changelog/<name>')
@@ -856,7 +865,7 @@ def lagging(repo, db):
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
     arch = repos[repo]['architecture']
-    res = Pager(db.execute(SQL_GET_PACKAGE_LAGGING,
+    res = utils.Pager(db.execute(SQL_GET_PACKAGE_LAGGING,
                 (repo, arch)), pagesize, page)
     for row in res:
         packages.append(dict(row))
@@ -877,7 +886,7 @@ def srcupd(tree, db):
     section = bottle.request.query.get('section') or None
     packages = []
     db.execute(SQL_ATTACH_PISS)
-    res = Pager(db.execute(SQL_GET_PACKAGE_SRCUPD, (tree, section, section)), pagesize, page)
+    res = utils.Pager(db.execute(SQL_GET_PACKAGE_SRCUPD, (tree, section, section)), pagesize, page)
     for row in res:
         packages.append(dict(row))
     if packages:
@@ -894,7 +903,7 @@ def ghost(repo, db):
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
-    res = Pager(db.execute(SQL_GET_PACKAGE_GHOST, (repo,)), pagesize, page)
+    res = utils.Pager(db.execute(SQL_GET_PACKAGE_GHOST, (repo,)), pagesize, page)
     for row in res:
         packages.append(dict(row))
     if packages:
@@ -913,7 +922,7 @@ def missing(repo, db):
     packages = []
     reponame = repos[repo]['realname']
     arch = repos[repo]['architecture']
-    res = Pager(db.execute(SQL_GET_PACKAGE_MISSING,
+    res = utils.Pager(db.execute(SQL_GET_PACKAGE_MISSING,
                 (reponame, arch, reponame)), pagesize, page)
     for row in res:
         packages.append(dict(row))
@@ -931,7 +940,7 @@ def tree(tree, db):
         return bottle.HTTPResponse(render('error.html',
                 error='Source tree "%s" not found.' % tree), 404)
     packages = []
-    res = Pager(db.execute(SQL_GET_PACKAGE_TREE, (tree,)), pagesize, page)
+    res = utils.Pager(db.execute(SQL_GET_PACKAGE_TREE, (tree,)), pagesize, page)
     for row in res:
         d = dict(row)
         d['dpkg_repos'] = ', '.join(sorted((d.pop('dpkg_availrepos') or '').split(',')))
@@ -977,12 +986,12 @@ def repo(repo, db):
         return bottle.HTTPResponse(render('error.html',
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
-    res = Pager(db.execute(SQL_GET_PACKAGE_REPO, (repo,)), pagesize, page)
+    res = utils.Pager(db.execute(SQL_GET_PACKAGE_REPO, (repo,)), pagesize, page)
     for row in res:
         d = dict(row)
         latest, fullver = d['dpkg_version'], d['full_version']
         d['ver_compare'] = VER_REL[
-            version_compare(latest, fullver) if latest else -1]
+            utils.version_compare(latest, fullver) if latest else -1]
         packages.append(d)
     return render('repo.html', repo=repo, packages=packages, page=pagination(res))
 
@@ -1016,8 +1025,7 @@ def qa_index(db):
                   srcissues_matrix=srcissues_matrix,
                   debissues_matrix=debissues_matrix,
                   srcissues_max=srcissues_max,
-                  debissues_max=debissues_max,
-                  codes=ISSUE_CODE)
+                  debissues_max=debissues_max)
 
 
 @app.route('/qa/code/')
@@ -1048,7 +1056,7 @@ def qa_code(db, code, repo=None):
     with get_pgconn() as pgdb:
         cur = pgdb.cursor()
         cur.execute(SQL_ISSUES_CODE, (code, repo))
-        res = Pager(cur, pagesize, page)
+        res = utils.Pager(cur, pagesize, page)
         results = list(map(dict, res))
         page = pagination(res)
     return render('qa_code.html', code=code, repo=repo, description=desc,
@@ -1083,31 +1091,34 @@ def qa_package(name, db):
     with get_pgconn() as pgdb:
         cur = pgdb.cursor()
         cur.execute(SQL_ISSUES_PACKAGE, (name,))
-        # errno, version, repo, level, filename, detail
         for errno, egroup in itertools.groupby(cur, key=operator.itemgetter(0)):
-            keys = []
-            values = []
-            uniqdict = {}
-            secid = 0
-            for version_repo, rgroup in itertools.groupby(egroup,
-                key=operator.itemgetter(1, 2)):
-                repo_result = tuple((r['level'], r['filename'], r['detail'])
-                    for r in rgroup)
-                repo_hash = tuple(map(operator.itemgetter(0, 1), repo_result))
-                result_id = uniqdict.get(repo_hash)
-                if result_id is None:
-                    keys.append([version_repo])
-                    values.append(repo_result)
-                    uniqdict[repo_hash] = secid
-                    secid += 1
-                else:
-                    keys[result_id].append(version_repo)
-            del uniqdict
-            issues.append({'errno': errno, 'examples': [
-                {'keys': k, 'files': v[:100], 'filecount': len(v)}
-                for k, v in zip(keys, values)
-            ]})
-    return render('qa_package.html', pkg=pkg, issues=issues, codes=ISSUE_CODE)
+            keys, values = utils.groupby_val(egroup,
+                operator.itemgetter(1, 2, 3),
+                operator.itemgetter('level', 'filename', 'detail'),
+                operator.itemgetter(0, 1))
+            if errno in (421, 431, 432):
+                examples = []
+                for k, v in zip(keys, values):
+                    filekeys, filevalues = utils.groupby_val(v,
+                        lambda x: (
+                            x[2]['package'], x[2]['version'], x[2]['repo']),
+                        lambda x: ((x[1], x[2]['sover_provide'].lstrip('.'))
+                            if errno==431 else x[1]), lambda x: x)
+                    examples.append({
+                        'keys': list(map(operator.itemgetter(0, 1), k)),
+                        'files_bypkg': [{'keys': fk, 'files': fv[:100],
+                        'filecount_estimated': len(fv)}
+                        for fk, fv in zip(filekeys, filevalues)],
+                        'summary': sorted(set(map(lambda x: x[0][0], filekeys)))
+                    })
+            else:
+                examples = [
+                    {'keys': list(map(operator.itemgetter(0, 1), k)),
+                     'files': v[:100], 'filecount': k[0][2]}
+                    for k, v in zip(keys, values)
+                ]
+            issues.append({'errno': errno, 'examples': examples})
+    return render('qa_package.html', pkg=pkg, issues=issues)
 
 
 @app.route('/qa/rebuild/')
@@ -1116,8 +1127,8 @@ def qa_rebuild():
 
 
 _debcompare_key = functools.cmp_to_key(lambda a, b:
-    (version_compare(a['version'], b['version'])
-     or cmp(a['filename'], b['filename'])))
+    (utils.version_compare(a['version'], b['version'])
+     or utils.cmp(a['filename'], b['filename'])))
 
 @app.route('/cleanmirror/<repo:path>')
 def cleanmirror(repo, db):
@@ -1156,16 +1167,16 @@ def cleanmirror(repo, db):
                 removereason.append('outoftree')
             elif repo != 'noarch':
                 if (deb['noarch'] and deb['noarchver']
-                    and version_compare(deb['version'],
+                    and utils.version_compare(deb['version'],
                         max(deb['noarchver'].split(','),
-                        key=version_compare_key)) < 0):
+                        key=utils.version_compare_key)) < 0):
                     if 'old' not in removereason:
                         removereason.append('old')
                     removereason.append('noarch')
             elif (not deb['noarch'] and deb['hasarchver']
-                  and version_compare(deb['version'],
+                  and utils.version_compare(deb['version'],
                       max(deb['hasarchver'].split(','),
-                      key=version_compare_key)) < 0):
+                      key=utils.version_compare_key)) < 0):
                 removereason.append('hasarch')
             deb['removereason'] = removereason
             if reason:
@@ -1217,7 +1228,7 @@ def data_dl(db, filename):
         content = lambda: open(gzfile, 'rb')
     else:
         # prevent it from using sendfile
-        content = lambda: iter_read1(gzip.open(gzfile, 'rb'))
+        content = lambda: utils.iter_read1(gzip.open(gzfile, 'rb'))
     return response_lm(content, headers=headers, modified=mtime, etag=etag)
 
 @app.route('/api_version')

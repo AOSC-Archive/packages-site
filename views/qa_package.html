@@ -25,6 +25,11 @@
 <p><b class="pkg-field">Links</b>:
 <a href="/changelog/{{ pkg['name']|urlencode }}">Changelog</a>,
 <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/issues/new?template=bug-report.md&title={{ pkg['name']|urlencode }}%3A%20">Report issues</a></p>
+
+{% if not issues %}
+<p class="tips">No issues. Keep up the good work.</p>
+{% endif %}
+
 {% for issue in issues %}
 <h2 id="{{ issue['errno'] }}" class="pkg-issue">Issue {{ issue['errno'] }}</h2>
 <p class="pkg-issue-desc">{{ issue_code[issue['errno']] }}</p>
@@ -60,14 +65,66 @@
 <p><b class="pkg-field">{{ e['filecount'] }} File{% if e['filecount'] > 1 %}s{% endif %}</b></p>
 <ul class="pkg-files">
 {% for file in e['files'] %}
-<li><span class="pkg-ls-perm{% if file[0] < 0 %} pkg-issue-crit{% endif %}">{{ file[2]['perm']|ls_perm }}</span> <span class="pkg-ls-user">{{ file[2]['uname'] }}({{ file[2]['uid'] }})</span> <span class="pkg-ls-user">{{ file[2]['gname'] }}({{ file[2]['gid'] }})</span> <span class="pkg-ls-size num">{{ file[2]['size']|sizeof_fmt_ls }}</span> {{ file[1] }}</li>
+<li><span class="pkg-ls-perm{% if file[0] < 0 %} pkg-issue-crit{% endif %}">{{ file[2]['perm']|ls_perm(file[2]['ftype']) }}</span> <span class="pkg-ls-user">{{ file[2]['uname'] }}({{ file[2]['uid'] }})</span> <span class="pkg-ls-user">{{ file[2]['gname'] }}({{ file[2]['gid'] }})</span> <span class="pkg-ls-size num">{{ file[2]['size']|sizeof_fmt_ls }}</span> {{ file[1] }}</li>
 {%- endfor %}
 {% if e['files']|length < e['filecount'] %}
 <li>&hellip;</li>
 {% endif %}
 </ul>
+{% elif issue['errno'] == 402 %}
+<p><b class="pkg-field">Commit</b>: <a href="https://github.com/AOSC-Dev/{{ e['files'][0][2]['tree'] }}/commit/{{ e['files'][0][2]['githash'] }}">{{ e['files'][0][2]['githash'] }}</a></p>
+<p><b class="pkg-field">Path</b>: {{ e['files'][0][1] }}</p>
+{% for path in e['files'][0][2]['paths'] %}
+<p><b class="pkg-field">Duplicate</b>: {{ path }}</p>
+{%- endfor %}
+{% elif issue['errno'] == 412 %}
+<p><b class="pkg-field">File</b>: <a href="https://repo.aosc.io/debs/{{ e['files'][0][1] }}">{{ e['files'][0][1] }}</a></p>
+{% for path in e['files'][0][2]['paths'] %}
+<p><b class="pkg-field">Duplicate</b>: <a href="https://repo.aosc.io/debs/{{ path }}">{{ path }}</a></p>
+{%- endfor %}
+{% elif issue['errno'] in [421, 432] %}
+<p>
+{% if issue['errno'] == 421 %}
+<b class="pkg-field pkg-dep-rel">Conflicts</b>:
+{%- else -%}
+<b class="pkg-field pkg-dep-rel">Depends</b>:
+{%- endif %}
+{% for dep in e['summary'] -%}
+{% if loop.index != 1 %},{% endif %}
+<span class="pkg-dep"><a href="{{ dep }}">{{ dep }}</a></span>
+{%- endfor %}
+</p>
+{% for files in e['files_bypkg'] -%}
+<h4>{% for key in files['keys'] -%}{% if loop.index != 1 %} ,{% endif %}{{ '%s %s (%s)'|format(*key) }}{%- endfor %}</h4>
+<ul class="pkg-files">
+{% for file in files['files'] %}
+<li>{{ file }}</li>
+{%- endfor %}
+{% if files['files']|length < files['filecount_estimated'] %}
+<li>&hellip;</li>
+{% endif %}
+</ul>
+{%- endfor %}
+{% elif issue['errno'] == 431 %}
+<p><b class="pkg-field pkg-dep-rel">Rebuild caused by</b>:
+{% for dep in e['summary'] -%}
+{% if loop.index != 1 %},{% endif %}
+<span class="pkg-dep"><a href="{{ dep }}">{{ dep }}</a></span>
+{%- endfor %}
+</p>
+{% for files in e['files_bypkg'] -%}
+<h4>{% for key in files['keys'] -%}{% if loop.index != 1 %} ,{% endif %}{{ '%s %s (%s)'|format(*key) }}{%- endfor %}</h4>
+<ul class="pkg-files">
+{% for file in files['files'] %}
+<li>{{ file[0] }} (provided: {{ file[1] }})</li>
+{%- endfor %}
+{% if files['files']|length < files['filecount_estimated'] %}
+<li>&hellip;</li>
+{% endif %}
+</ul>
+{%- endfor %}
 {% else %}
-<ul>
+<ul class="pkg-files">
 {% for file in e['files'] %}
 <li>{{ file[1] }}: {{ file[2] }}</li>
 {%- endfor %}
