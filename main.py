@@ -370,24 +370,25 @@ INNER JOIN v_packages vp ON vp.name=q.name
 ORDER BY q.matchcls, q.ftrank, vp.commit_time DESC, q.name
 '''
 
-SQL_ISSUES_STATS_SRC = '''
-SELECT i.repo, i.errno, count(DISTINCT i.package) cnt
-FROM pv_package_issues i
-INNER JOIN tree_branches b ON i.repo=b.name
-INNER JOIN trees t ON t.name=b.tree
-WHERE i.errno < 200 OR i.errno BETWEEN 400 AND 409
-GROUP BY t.tid, b.priority, i.repo, i.errno
-ORDER BY t.tid, b.priority, i.errno
-'''
-
-SQL_ISSUES_STATS_DEB = '''
-SELECT i.repo, i.errno, count(DISTINCT package) cnt
-FROM pv_package_issues i
-INNER JOIN pv_repos r ON i.repo=r.name
-INNER JOIN dpkg_repo_stats s ON s.repo=i.repo
-WHERE i.errno BETWEEN 200 AND 399 OR i.errno >= 410
-GROUP BY r.realname, r.testing, i.repo, i.errno
-ORDER BY r.realname, r.testing, i.errno
+SQL_ISSUES_STATS = '''
+SELECT q1.repo, q1.errno, q1.cnt,
+  round((q1.cnt::float8/coalesce(q2.total, s.cnt))::numeric, 5)::float8 ratio
+FROM (
+  SELECT repo, errno, count(DISTINCT package) cnt
+  FROM pv_package_issues
+  GROUP BY repo, errno
+) q1
+LEFT JOIN (
+  SELECT repo, count(package) cnt FROM v_packages_new GROUP BY repo
+) s ON s.repo=q1.repo
+LEFT JOIN tree_branches b ON b.name=q1.repo
+LEFT JOIN (
+  SELECT p.tree, v.branch, count(DISTINCT p.name) total
+  FROM package_versions v
+  INNER JOIN packages p ON v.package=p.name
+  GROUP BY p.tree, v.branch
+) q2 ON q2.tree=b.tree AND q2.branch=b.branch
+ORDER BY q1.repo, q1.errno
 '''
 
 SQL_ISSUES_OLD_DEB = '''
@@ -405,8 +406,7 @@ GROUP BY repo
 '''
 
 SQL_ISSUES_RECENT = '''
-SELECT package, version,
-  string_agg(DISTINCT errno::text, ',' ORDER BY errno::text) errs
+SELECT package, version, array_agg(DISTINCT errno ORDER BY errno) errs
 FROM pv_package_issues
 WHERE errno!=311
 GROUP BY package, version
@@ -662,16 +662,17 @@ def pg_issues():
         cur = db.cursor()
         cur.execute("SELECT count(DISTINCT package) FROM pv_package_issues")
         cnt = cur.fetchone()[0]
-        cur.execute(SQL_ISSUES_STATS_SRC)
-        cnt_src = list(map(dict, cur))
-        cur.execute(SQL_ISSUES_STATS_DEB)
-        cnt_deb = list(map(dict, cur))
-        cur.execute(SQL_ISSUES_RECENT)
-        recent = []
+        cur.execute(SQL_ISSUES_STATS)
+        cnt_src = []
+        cnt_deb = []
         for row in cur:
             d = dict(row)
-            d['errs'] = list(map(int, d['errs'].split(',')))
-            recent.append(d)
+            if d['errno'] < 200 or 400 <= d['errno'] <= 409:
+                cnt_src.append(d)
+            else:
+                cnt_deb.append(d)
+        cur.execute(SQL_ISSUES_RECENT)
+        recent = list(map(dict, cur))
         cur.close()
     return cnt, cnt_src, cnt_deb, recent
 
@@ -1014,22 +1015,26 @@ def qa_index(db):
     total = sum(r['pkgcount'] for r in db_trees(db).values())
     olddebs = dict(db.execute("SELECT repo, oldcnt FROM dpkg_repo_stats"))
     numissues, cnt_src, cnt_deb, recent = pg_issues()
-    srclist = {repo: {r['errno']:r['cnt'] for r in group} for repo, group in
+    srclist = {repo: {r['errno']: (r['cnt'], r['ratio']) for r in group}
+        for repo, group in
         itertools.groupby(cnt_src, key=operator.itemgetter('repo'))}
     srcissues = sorted(functools.reduce(set.union,
         (r.keys() for r in srclist.values()), set()))
     srcissues_matrix = [tree_branches[t] +
-        ([srclist[t].get(err, 0) for err in srcissues]
-        if t in srclist else [0]*len(srcissues),) for t in tree_branches]
-    srcissues_max = max(max(row[-1]) for row in srcissues_matrix)
-    deblist = {repo: {r['errno']:r['cnt'] for r in group} for repo, group in
+        ([srclist[t].get(err, (0,0)) for err in srcissues]
+        if t in srclist else [(0,0)]*len(srcissues),) for t in tree_branches]
+    srcissues_max = max(max(map(operator.itemgetter(1), row[-1]))
+        for row in srcissues_matrix)
+    deblist = {repo: {r['errno']: (r['cnt'], r['ratio']) for r in group}
+        for repo, group in
         itertools.groupby(cnt_deb, key=operator.itemgetter('repo'))}
     debissues = sorted(functools.reduce(set.union,
         (r.keys() for r in deblist.values()), set()))
     debissues_matrix = [(repos[r]['realname'], repos[r]['branch'],
-        [deblist[r].get(err, 0) for err in debissues]
-        if r in deblist else [0]*len(debissues)) for r in repos]
-    debissues_max = max(max(row[-1]) for row in debissues_matrix)
+        [deblist[r].get(err, (0,0)) for err in debissues]
+        if r in deblist else [(0,0)]*len(debissues)) for r in repos]
+    debissues_max = max(max(map(operator.itemgetter(1), row[-1]))
+        for row in debissues_matrix)
     return render('qa_index.html', total=numissues,
                   percent=(100*numissues/total), recent=recent, olddebs=olddebs,
                   srcissues_key=srcissues, debissues_key=debissues,
@@ -1068,7 +1073,11 @@ def qa_code(db, code, repo=None):
         cur = pgdb.cursor()
         cur.execute(SQL_ISSUES_CODE, (code, repo))
         res = utils.Pager(cur, pagesize, page)
-        results = list(map(dict, res))
+        results = []
+        for row in res:
+            d = dict(row)
+            d['versions'] = sorted(d['versions'], key=utils.version_compare_key)
+            results.append(d)
         page = pagination(res)
     return render('qa_code.html', code=code, repo=repo, description=desc,
                   packages=results, page=page)
@@ -1111,16 +1120,18 @@ def qa_package(name, db):
                 examples = []
                 for k, v in zip(keys, values):
                     filekeys, filevalues = utils.groupby_val(v,
+                        lambda x: ((None, None, None) if x[2] is None else
+                            (x[2]['package'], x[2]['version'], x[2]['repo'])),
                         lambda x: (
-                            x[2]['package'], x[2]['version'], x[2]['repo']),
-                        lambda x: ((x[1], x[2]['sover_provide'].lstrip('.'))
-                            if errno==431 else x[1]), lambda x: x)
+                            (x[1], x[2]['sover_provide'].lstrip('.') if x[2]
+                            else None) if errno==431 else x[1]), lambda x: x)
                     examples.append({
                         'keys': list(map(operator.itemgetter(0, 1), k)),
                         'files_bypkg': [{'keys': fk, 'files': fv[:100],
                         'filecount_estimated': len(fv)}
                         for fk, fv in zip(filekeys, filevalues)],
-                        'summary': sorted(set(map(lambda x: x[0][0], filekeys)))
+                        'summary': sorted(set(
+                            filter(None, map(lambda x: x[0][0], filekeys))))
                     })
             else:
                 examples = [
@@ -1131,15 +1142,6 @@ def qa_package(name, db):
             issues.append({'errno': errno, 'examples': examples})
     return render('qa_package.html', pkg=pkg, issues=issues)
 
-
-@app.route('/qa/rebuild/')
-def qa_rebuild():
-    return render('qa_index.html')
-
-
-_debcompare_key = functools.cmp_to_key(lambda a, b:
-    (utils.version_compare(a['version'], b['version'])
-     or utils.cmp(a['filename'], b['filename'])))
 
 @app.route('/cleanmirror/<repo:path>')
 def cleanmirror(repo, db):

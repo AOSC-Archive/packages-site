@@ -254,6 +254,9 @@ tr {
 .pkg-issue {
   border-bottom: 1px solid #ddd;
 }
+.pkg-issue:target {
+  background-color: aliceblue;
+}
 .pkg-issue-desc {
   font-size: 1.1em;
 }

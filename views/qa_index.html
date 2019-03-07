@@ -43,9 +43,10 @@
     <td>{{ row[0] }}</td>
     <td>{{ row[1] }}</td>
     {% for col in row[2] -%}
-    <td class="repo-pkgcount num"{% if srcissues_max and col %} style="background-color:hsl(17,100%,{{ '%d'|format(100-100/3*col/srcissues_max) }}%)"{% endif %}>{% if col -%}
-      <a href="code/{{ srcissues_key[loop.index0] }}/{{ row[0] }}/{{ row[1] }}">{{ col }}</a>
-    {%- else %}{{ col }}{% endif %}</td>
+    <td class="repo-pkgcount num"{% if srcissues_max and col[0] %} style="background-color:hsl(17,100%,{{ '%d'|format(100-100/3*col[1]/srcissues_max) }}%)" title="{{ '%.1f%%'|format(100*col[1]) }}"{% endif %}>{% if col[0] -%}
+      <a href="code/{{ srcissues_key[loop.index0] }}/{{ row[0] }}/{{ row[1] }}">
+        {{ col[0] }}</a>
+    {%- else %}{{ col[0] }}{% endif %}</td>
     {%- endfor %}
   </tr>
 {%- endfor %}
@@ -74,9 +75,10 @@
     <td>{{ row[1] }}</td>
     <td class="repo-pkgcount num"><a href="/cleanmirror/{{ row[0] }}/{{ row[1] }}">{{ olddebs['%s/%s'|format(row[0], row[1])] }}</a></td>
     {% for col in row[2] -%}
-      <td class="repo-pkgcount num"{% if srcissues_max and col %} style="background-color:hsl(17,100%,{{ '%d'|format(100-100/3*col/debissues_max) }}%)"{% endif %}>{% if col -%}
-      <a href="code/{{ debissues_key[loop.index0] }}/{{ row[0] }}/{{ row[1] }}">{{ col }}</a>
-    {%- else %}{{ col }}{% endif %}</td>
+      <td class="repo-pkgcount num"{% if srcissues_max and col[0] %} style="background-color:hsl(17,100%,{{ '%d'|format(100-100/3*col[1]/debissues_max) }}%)" title="{{ '%.1f%%'|format(100*col[1]) }}"{% endif %}>{% if col[0] -%}
+      <a href="code/{{ debissues_key[loop.index0] }}/{{ row[0] }}/{{ row[1] }}">
+        {{ col[0] }}</a>
+    {%- else %}{{ col[0] }}{% endif %}</td>
     {%- endfor %}
   </tr>
 {%- endfor %}

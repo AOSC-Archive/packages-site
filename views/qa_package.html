@@ -24,6 +24,9 @@
 {%- endif %}
 <p><b class="pkg-field">Links</b>:
 <a href="/changelog/{{ pkg['name']|urlencode }}">Changelog</a>,
+{% if pkg['hasrevdep'] -%}
+<a href="/revdep/{{ pkg['name']|urlencode }}">Reverse dependency</a>,
+{%- endif %}
 <a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/issues/new?template=bug-report.md&title={{ pkg['name']|urlencode }}%3A%20">Report issues</a></p>
 
 {% if not issues %}
@@ -60,7 +63,7 @@
 <p><b class="pkg-field">Should be</b>: {{ e['files'][0][2]['suggestion'] }}</p>
 {% elif issue['errno'] == 311 %}
 <p><b class="pkg-field">Maintainer</b>: {{ e['files'][0][2]['maintainer']|replace('@', '<span class="email"></span>'|safe) }}</p>
-<p><b class="pkg-field">Committer</b>: <a href="https://github.com/AOSC-Dev/{{ e['files'][0][2]['tree'] }}/commit/{{ e['files'][0][2]['githash'] }}">{{ e['files'][0][2]['committer']|d('(not found)')|replace('@', '<span class="email"></span>'|safe) }}</a></p>
+<p><b class="pkg-field">Committer</b>: <a href="https://github.com/AOSC-Dev/{{ e['files'][0][2]['tree'] }}/commit/{{ e['files'][0][2]['githash'] }}">{{ e['files'][0][2]['committer']|d('(not found)', true)|replace('@', '<span class="email"></span>'|safe) }}</a></p>
 {% elif issue['errno'] > 320 and issue['errno'] < 330 %}
 <p><b class="pkg-field">{{ e['filecount'] }} File{% if e['filecount'] > 1 %}s{% endif %}</b></p>
 <ul class="pkg-files">
@@ -106,17 +109,23 @@
 </ul>
 {%- endfor %}
 {% elif issue['errno'] == 431 %}
+{% if e['summary'] %}
 <p><b class="pkg-field pkg-dep-rel">Rebuild caused by</b>:
 {% for dep in e['summary'] -%}
 {% if loop.index != 1 %},{% endif %}
 <span class="pkg-dep"><a href="{{ dep }}">{{ dep }}</a></span>
 {%- endfor %}
 </p>
+{% endif %}
 {% for files in e['files_bypkg'] -%}
-<h4>{% for key in files['keys'] -%}{% if loop.index != 1 %} ,{% endif %}{{ '%s %s (%s)'|format(*key) }}{%- endfor %}</h4>
+<h4>{% for key in files['keys'] -%}
+{% if loop.index != 1 %}, {% endif %}{% if key[0] -%}
+{{ '%s %s (%s)'|format(*key) }}{% else %}(Dependency not found)
+{%- endif %}{%- endfor %}</h4>
 <ul class="pkg-files">
 {% for file in files['files'] %}
-<li>{{ file[0] }} (provided: {{ file[1] }})</li>
+<li>{{ file[0] }}
+{% if file[1] %}(provided: {{ file[1] }}){% endif %}</li>
 {%- endfor %}
 {% if files['files']|length < files['filecount_estimated'] %}
 <li>&hellip;</li>

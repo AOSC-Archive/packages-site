@@ -225,7 +225,9 @@ class TestWebsite(unittest.TestCase):
                     req.raise_for_status()
                     dl = req.json()
                     self.assertEqual(
-                        dl["page"]["count"], v, '%s: %s/%s' % (k, repo, branch))
+                        dl["page"]["count"], v[0], '%s: %s/%s' % (k, repo, branch))
+                    self.assertEqual(bool(dl["packages"]), bool(v[0]),
+                        '%s: %s/%s' % (k, repo, branch))
 
     def test_api_version(self):
         req = requests.get(URLBASE + '/api_version')
