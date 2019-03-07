@@ -376,19 +376,18 @@ SELECT q1.repo, q1.errno, q1.cnt,
 FROM (
   SELECT repo, errno, count(DISTINCT package) cnt
   FROM pv_package_issues
-  GROUP BY repo, errno
+  GROUP BY GROUPING SETS ((repo, errno), ())
 ) q1
 LEFT JOIN (
   SELECT repo, count(package) cnt FROM v_packages_new GROUP BY repo
 ) s ON s.repo=q1.repo
-LEFT JOIN tree_branches b ON b.name=q1.repo
 LEFT JOIN (
-  SELECT p.tree, v.branch, count(DISTINCT p.name) total
+  SELECT b.name repo, count(DISTINCT p.name) total
   FROM package_versions v
   INNER JOIN packages p ON v.package=p.name
-  GROUP BY p.tree, v.branch
-) q2 ON q2.tree=b.tree AND q2.branch=b.branch
-ORDER BY q1.repo, q1.errno
+  INNER JOIN tree_branches b ON b.tree=p.tree AND b.branch=v.branch
+  GROUP BY GROUPING SETS ((b.name), ())
+) q2 ON q2.repo IS NOT DISTINCT FROM q1.repo
 '''
 
 SQL_ISSUES_OLD_DEB = '''
@@ -660,21 +659,23 @@ def db_trees(db):
 def pg_issues():
     with get_pgconn() as db:
         cur = db.cursor()
-        cur.execute("SELECT count(DISTINCT package) FROM pv_package_issues")
-        cnt = cur.fetchone()[0]
         cur.execute(SQL_ISSUES_STATS)
+        totalcnt = ratio = 0
         cnt_src = []
         cnt_deb = []
         for row in cur:
             d = dict(row)
-            if d['errno'] < 200 or 400 <= d['errno'] <= 409:
+            if d['repo'] is None:
+                totalcnt = d['cnt']
+                ratio = d['ratio']
+            elif d['errno'] < 200 or 400 <= d['errno'] <= 409:
                 cnt_src.append(d)
             else:
                 cnt_deb.append(d)
         cur.execute(SQL_ISSUES_RECENT)
         recent = list(map(dict, cur))
         cur.close()
-    return cnt, cnt_src, cnt_deb, recent
+    return totalcnt, ratio, cnt_src, cnt_deb, recent
 
 
 def makefullver(epoch, version, release):
@@ -1012,9 +1013,8 @@ def qa_index(db):
     tree_branches = {r[0]:r[1:] for r in
         db.execute("SELECT name, tree, branch FROM tree_branches")}
     repos = db_repos(db)
-    total = sum(r['pkgcount'] for r in db_trees(db).values())
     olddebs = dict(db.execute("SELECT repo, oldcnt FROM dpkg_repo_stats"))
-    numissues, cnt_src, cnt_deb, recent = pg_issues()
+    numissues, issueratio, cnt_src, cnt_deb, recent = pg_issues()
     srclist = {repo: {r['errno']: (r['cnt'], r['ratio']) for r in group}
         for repo, group in
         itertools.groupby(cnt_src, key=operator.itemgetter('repo'))}
@@ -1036,7 +1036,7 @@ def qa_index(db):
     debissues_max = max(max(map(operator.itemgetter(1), row[-1]))
         for row in debissues_matrix)
     return render('qa_index.html', total=numissues,
-                  percent=(100*numissues/total), recent=recent, olddebs=olddebs,
+                  percent=(100*issueratio), recent=recent, olddebs=olddebs,
                   srcissues_key=srcissues, debissues_key=debissues,
                   srcissues_matrix=srcissues_matrix,
                   debissues_matrix=debissues_matrix,
