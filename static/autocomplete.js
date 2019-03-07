@@ -252,8 +252,6 @@ function prefixSearch(trie, term){
   return matches;
 }
 document.addEventListener("DOMContentLoaded", function(event) {
-  var searchInput = document.querySelector('input#searchinput');
-  var searchForm = document.getElementById('searchbox');
   var pkgComplete = new autoComplete({
     selector: 'input#searchinput',
     minChars: 2,
