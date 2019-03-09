@@ -4,7 +4,7 @@
 <link rel="canonical" href="https://packages.aosc.io/qa/">
 {%- endblock %}
 {% block banner %}<h1>Package Quality Assurance</h1>
-<p>There are <span class="num">{{ total }}</span> (<span class="num">{{ '%.2f'|format(percent) }}</span>%) package{% if total > 1 %}s{% endif %} with problems.</p>
+<p>There are <span class="num">{{ total }}</span> (<span class="num">{{ '%.2f'|format(percent) }}</span>%) package{% if total > 1 %}s{% endif %} with problems. See also: <a href="code/">Issue code definition</a></p>
 {% endblock %}
 {% block main %}
 <h2>Recent Unresolved Problems</h2>
