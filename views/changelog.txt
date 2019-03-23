@@ -1,5 +1,5 @@
 {% for ch in changes -%}
-{{ name }} ({{ ch.fullver|d('?', true) }}) testing; urgency=medium
+{{ name }} ({{ ch.fullver|d('?', true) }}) {{ ch.branch }}; urgency=medium
 
   [{% if ch.githash %}{{ ch.githash[:10] }}{% else %}??????????{% endif %}] {{ ch.message|fill(78, subsequent_indent='  ') }}
 

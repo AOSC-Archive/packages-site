@@ -90,14 +90,18 @@ SELECT
   ((CASE WHEN ifnull(epoch, '') = '' THEN '' ELSE epoch || ':' END) ||
    version || (CASE WHEN ifnull(release, '') IN ('', '0') THEN '' ELSE '-' ||
    release END)) fullver, pr.rid rid, m.githash githash,
+  min(b.priority) priority, b.branch,
   round((ev.mtime-2440587.5)*86400) time,
   ev.user email, cm.name fullname, pr.message message
 FROM marks.package_rel pr
+INNER JOIN marks.branches mb ON mb.rid=pr.rid
+INNER JOIN tree_branches b ON b.branch=mb.tagname AND b.tree=?
 LEFT JOIN marks.marks m ON m.rid=pr.rid
 LEFT JOIN fossil.event ev ON ev.objid=pr.rid
 LEFT JOIN marks.committers cm ON cm.email=ev.user
 WHERE package = ?
-ORDER BY mtime DESC, rid DESC
+GROUP BY pr.rid
+ORDER BY mtime DESC, pr.rid DESC
 '''
 
 SQL_GET_PACKAGE_DPKG = '''
@@ -849,7 +853,7 @@ def changelog(name, db):
     db.execute('ATTACH ? AS marks', ('file:data/%s-marks.db?mode=ro' % pkg['tree'],))
     db.execute('ATTACH ? AS fossil', ('file:data/%s.fossil?mode=ro' % pkg['tree'],))
     changelog = []
-    for row in db.execute(SQL_GET_PACKAGE_CHANGELOG, (name,)):
+    for row in db.execute(SQL_GET_PACKAGE_CHANGELOG, (pkg['tree'], name,)):
         changelog.append(dict(row))
     bottle.response.content_type = 'text/plain; charset=UTF-8'
     return render('changelog.txt', name=name, changes=changelog)
