@@ -72,7 +72,7 @@
       {%- elif col['testing'] == 2 -%}
       <td class="dpkg dpkg-explosive" title="explosive">
       {%- else -%}<td class="dpkg">{%- endif %}
-        <a href="https://repo.aosc.io/debs/{{ col['filename'] }}">
+        <a href="/files/{{ col['repo'] }}/{{ pkg['name']|urlencode }}/{{ pkg['versions'][loop.index0][0]|urlencode }}">
           {{ col['size']|sizeof_fmt }}
         </a>
       </td>{%- else -%}<td class="dpkg dpkg-missing"></td>

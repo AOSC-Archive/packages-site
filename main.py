@@ -114,6 +114,23 @@ WHERE package = ?
 ORDER BY dr.realname ASC, version COLLATE vercomp DESC, testing DESC
 '''
 
+SQL_GET_PACKAGE_DEB_LOCAL = '''
+SELECT
+  package, version, architecture, repo, maintainer, installed_size,
+  filename, size, sha256
+FROM dpkg_packages
+WHERE package=? AND version=? AND repo=?
+'''
+
+SQL_GET_PACKAGE_DEB_FILES = '''
+SELECT
+  (CASE WHEN path='' THEN '' ELSE '/' || path END) || '/' || "name" filename,
+  "size", ftype, perm, uid, gid, uname, gname
+FROM pv_package_files
+WHERE package=%s AND version=%s AND repo=%s AND ftype!='dir'
+ORDER BY filename
+'''
+
 SQL_GET_PACKAGE_REPO = '''
 SELECT
   p.name name, p.full_version full_version, dpkg.dpkg_version dpkg_version,
@@ -841,6 +858,27 @@ def package(name, db):
             pkg['upstream']['ver_compare'] = VER_REL[
                 utils.version_compare(pkg['version'], res_upstream['version'])]
     return render('package.html', pkg=pkg)
+
+@app.route('/files/<reponame>/<branch>/<name>/<version>')
+def files(name, version, reponame, branch, db):
+    repo = reponame + '/' + branch
+    res = db.execute(SQL_GET_PACKAGE_DEB_LOCAL, (name, version, repo)).fetchone()
+    if res is None:
+        return bottle.HTTPResponse(render('error.html',
+                error='Package "%s" (%s) not found in %s.' %
+                (name, version, repo)), 404)
+    d = dict(res)
+    with get_pgconn() as pgdb:
+        cur = pgdb.cursor()
+        cur.execute("SELECT debtime FROM pv_packages WHERE filename=%s",
+            (d['filename'],))
+        res = cur.fetchone()
+        d['debtime'] = 0
+        if res:
+            d['debtime'] = res[0]
+        cur.execute(SQL_GET_PACKAGE_DEB_FILES, (name, version, repo))
+        files = list(map(dict, cur))
+    return render('files.html', pkg=d, files=files)
 
 @app.route('/changelog/<name>')
 def changelog(name, db):

@@ -6,7 +6,6 @@ import re
 import math
 import time
 import weakref
-import colorsys
 import itertools
 import functools
 import collections
