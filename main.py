@@ -870,7 +870,21 @@ def revdep(name, db):
         key=operator.itemgetter('relationship')):
         for row in group:
             revdeps[relationship].append(dict(row))
-    return render('revdep.html', name=name, revdeps=revdeps)
+    sobreaks = []
+    circular = None
+    with get_pgconn() as pgdb:
+        cur = pgdb.cursor()
+        cur.execute("SELECT dep_package, deplist FROM v_so_breaks_dep "
+            "WHERE package=%s", (name,))
+        res = {k: set(v) for k, v in cur}
+        try:
+            for level in utils.toposort(res):
+                sobreaks.append(level)
+        except utils.CircularDependencyError as ex:
+            circular = ex.data
+        sobreaks.reverse()
+    return render('revdep.html', name=name, revdeps=revdeps,
+                  sobreaks=sobreaks, sobreaks_circular=circular)
 
 @app.route('/lagging/<repo:path>')
 def lagging(repo, db):

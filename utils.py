@@ -105,6 +105,34 @@ def groupby_val(iterable, key=None, resultkey=None, resultcmpkey=None):
     del uniqdict
     return keys, values
 
+
+class CircularDependencyError(ValueError):
+    def __init__(self, data):
+        s = 'Circular dependencies exist among these items: {%s}' % (
+            ', '.join('{!r}:{!r}'.format(key, value)
+            for key, value in sorted(data.items())))
+        super(CircularDependencyError, self).__init__(s)
+        self.data = data
+
+def toposort(data):
+    if not data:
+        return
+    # normalize data
+    #data = {k: data.get(k, set()).difference(set((k,))) for k in
+        #functools.reduce(set.union, data.values(), set(data.keys()))}
+    # we don't need this
+    data = data.copy()
+    while True:
+        ordered = set(item for item, dep in data.items() if not dep)
+        if not ordered:
+            break
+        yield sorted(ordered)
+        data = {item: (dep - ordered) for item, dep in data.items()
+                if item not in ordered}
+    if data:
+        raise CircularDependencyError(data)
+
+
 class FileRemover(object):
     def __init__(self):
         self.weak_references = dict()  # weak_ref -> filepath to remove
