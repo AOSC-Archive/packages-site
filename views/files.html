@@ -11,6 +11,12 @@
 <p><b class="pkg-field">SHA256</b>: <code>{{ pkg['sha256'] }}</code></p>
 <p><b class="pkg-field">Installed Size</b>: {{ (pkg['installed_size']*1024)|sizeof_fmt }}</p>
 <p><b class="pkg-field">Maintainer</b>: {{ pkg['maintainer']|replace('@', '<span class="email"></span>'|safe) }}</p>
+{% if sodepends -%}
+<p><b class="pkg-field">Library depends</b>: {{ sodepends|join(', ') }}</p>
+{% endif %}
+{% if soprovides -%}
+<p><b class="pkg-field">Library provides</b>: {{ soprovides|join(', ') }}</p>
+{% endif %}
 <p><b class="pkg-field">Files</b>: </p>
 <ul class="pkg-files">
 {% for file in files %}

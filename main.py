@@ -131,6 +131,13 @@ WHERE package=%s AND version=%s AND repo=%s AND ftype!='dir'
 ORDER BY filename
 '''
 
+SQL_GET_PACKAGE_SODEP = '''
+SELECT depends, name || ver soname
+FROM pv_package_sodep
+WHERE package=%s AND version=%s AND repo=%s
+ORDER BY depends, name, ver
+'''
+
 SQL_GET_PACKAGE_REPO = '''
 SELECT
   p.name name, p.full_version full_version, dpkg.dpkg_version dpkg_version,
@@ -878,7 +885,16 @@ def files(name, version, reponame, branch, db):
             d['debtime'] = res[0]
         cur.execute(SQL_GET_PACKAGE_DEB_FILES, (name, version, repo))
         files = list(map(dict, cur))
-    return render('files.html', pkg=d, files=files)
+        soprovides = []
+        sodepends = []
+        cur.execute(SQL_GET_PACKAGE_SODEP, (name, version, repo))
+        for depends, soname in cur:
+            if depends:
+                sodepends.append(soname)
+            else:
+                soprovides.append(soname)
+    return render('files.html', pkg=d, files=files,
+        sodepends=sodepends, soprovides=soprovides)
 
 @app.route('/changelog/<name>')
 def changelog(name, db):
