@@ -1,0 +1,13 @@
+Relationship	Level	Dependency	Version
+{% for rel in dep_rel_rev -%}
+{% if rel in revdeps -%}
+{% for dep in revdeps[rel] -%}
+{{ rel }}		{{ dep['package'] }}	{{ dep['version'] }}
+{% endfor %}{% endif %}
+{%- endfor %}{% if sobreaks -%}
+{% for level in sobreaks -%}{% set outer_loop = loop %}{% for package in level -%}
+SOBREAK	{{ outer_loop.index }}	{{ package }}	
+{% endfor %}{% endfor %}{% if sobreaks_circular -%}
+{% for package in sobreaks_circular -%}
+SOBREAK		{{ package }}	
+{% endfor %}{% endif %}{% endif %}

@@ -35,7 +35,7 @@ while {$testpath ne ""} {
         WHERE status IS null ORDER BY random() LIMIT 1
     }]
     set testpath [lindex $row 0]
-    if {$fastcheck && [regexp "^/(packages|changelog|revdep)/" $testpath]} {
+    if {$fastcheck && [regexp "^/(packages|changelog|revdep|qa)/" $testpath]} {
         db eval {UPDATE links SET status=-1 WHERE url=$testpath}
         continue
     }

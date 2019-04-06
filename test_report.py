@@ -2,11 +2,13 @@
 # -*- coding: utf-8 -*-
 
 import os
+import random
 import shutil
 import sqlite3
 import tempfile
 import unittest
 import subprocess
+import urllib.parse
 
 import requests
 
@@ -30,6 +32,8 @@ def download_file(url, localpath, filename=None, gzip=True):
     r.close()
     return local_filename, etag
 
+
+
 class TestWebsite(unittest.TestCase):
 
     def setUp(self):
@@ -37,9 +41,11 @@ class TestWebsite(unittest.TestCase):
         self.dbhash = shutil.which('dbhash') or shutil.which('./dbhash')
 
     def test_listnumber(self):
-        req = requests.get(URLBASE + '/?type=json')
-        req.raise_for_status()
-        d = req.json()
+        req = requests.get(URLBASE + '/?type=tsv')
+        self.assertEqual(req.status_code, 200)
+        self.assertEqual(req.headers['Content-Type'], 'text/html; charset=UTF-8')
+        req.close()
+        d = self._test_view_type(URLBASE + '/?type={vtype}', ('html',))
         repo_nums = {}
         tree_nums = {}
         for _, cat in d['repo_categories']:
@@ -56,30 +62,30 @@ class TestWebsite(unittest.TestCase):
             for (name, num) in zip(('repo', 'ghost', 'lagging', 'missing'), row):
                 if num is None:
                     continue
-                req = requests.get('%s/%s/%s?type=json' % (URLBASE, name, rn))
-                req.raise_for_status()
-                d = req.json()
-                if 'error' in d:
-                    realnum = 0
-                else:
-                    realnum = d['page']['count']
-                if num != realnum:
-                    fails.append((rn, name, num, realnum))
+                with self.subTest(name=name, rn=rn, num=num):
+                    d = self._test_view_type(
+                        '%s/%s/%s?type={vtype}' % (URLBASE, name, rn),
+                        ('html', 'tsv'))
+                    if 'error' in d:
+                        realnum = 0
+                    else:
+                        realnum = d['page']['count']
+                    if num != realnum:
+                        fails.append((rn, name, num, realnum))
         for rn, row in tree_nums.items():
             for (name, num) in zip(('tree', 'srcupd'), row):
-                req = requests.get('%s/%s/%s?type=json' % (URLBASE, name, rn))
-                req.raise_for_status()
-                d = req.json()
-                if 'error' in d:
-                    realnum = 0
-                else:
-                    realnum = d['page']['count']
-                if num != realnum:
-                    fails.append((rn, name, num, realnum))
+                with self.subTest(name=name, rn=rn, num=num):
+                    d = self._test_view_type(
+                        '%s/%s/%s?type={vtype}' % (URLBASE, name, rn),
+                        ('html', 'tsv'))
+                    if 'error' in d:
+                        realnum = 0
+                    else:
+                        realnum = d['page']['count']
+                    if num != realnum:
+                        fails.append((rn, name, num, realnum))
         self.assertListEqual([], fails, msg='rn, name, stat, list')
-        req = requests.get(URLBASE + '/updates?type=json')
-        req.raise_for_status()
-        d = req.json()
+        d = self._test_view_type(URLBASE + '/updates?type={vtype}', ('html', 'tsv'))
         self.assertEqual(len(d['packages']), 100)
 
     def test_listjson(self):
@@ -128,10 +134,15 @@ class TestWebsite(unittest.TestCase):
         req = requests.get(URLBASE + '/search/?q=glibc&type=json')
         req.raise_for_status()
         self.assertFalse(req.history)
+        d = self._test_view_type(
+            URLBASE + '/search/?q=glib&noredir=1&type={vtype}', ('html', 'tsv'))
+        self.assertTrue(d['packages'])
 
     def test_query(self):
         req = requests.get(URLBASE + '/query/')
-        req.raise_for_status()
+        self.assertEqual(req.status_code, 200)
+        req.close()
+        self._test_view_type(URLBASE + '/query/?type={vtype}', ('html', 'tsv'))
         for query, result in (
             ("select * from sqlite_master", True),
             ("select ('1.10' < '1.2' COLLATE vercomp)", True),
@@ -144,13 +155,39 @@ class TestWebsite(unittest.TestCase):
             ("WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x<5) SELECT x FROM c;", False),
             ("select 1;select 2;", False),
         ):
-            req = requests.post(URLBASE + '/query/?type=json',
-                                data={'q': query})
-            req.raise_for_status()
-            self.assertEqual(req.status_code, 200)
-            d = req.json()
-            self.assertEqual(not d.get('error'), result, (query, d.get('error')))
-            self.assertLessEqual(len(d['rows']), 10000)
+            with self.subTest(query=query, result=result):
+                req = requests.post(URLBASE + '/query/?type=json',
+                                    data={'q': query})
+                self.assertEqual(req.status_code, 200)
+                d = req.json()
+                req.close()
+                self.assertEqual(not d.get('error'), result, (query, d.get('error')))
+                rowcount = len(d['rows'])
+                self.assertLessEqual(rowcount, 10000)
+                req = requests.post(URLBASE + '/query/?type=tsv',
+                                    data={'q': query})
+                self.assertEqual(req.status_code, 200)
+                self.validate_tsv(req.text, rowcount)
+                req.close()
+
+    def test_package(self):
+        for package in ('glibc', 'sqlite', 'atril'):
+            with self.subTest(package=package):
+                d = self._test_view_type('%s/packages/%s?type={vtype}' % (
+                    URLBASE, package), ('html',))
+                self._test_view_type('%s/changelog/%s?type={vtype}' % (
+                    URLBASE, package), ('txt',))
+                self._test_view_type('%s/revdep/%s?type={vtype}' % (
+                    URLBASE, package), ('html', 'tsv'))
+                self._test_view_type('%s/qa/packages/%s?type={vtype}' % (
+                    URLBASE, package), ('html',))
+                for row in d['pkg']['dpkg_matrix']:
+                    for dpkg in row[1]:
+                        if dpkg is None:
+                            continue
+                        self._test_view_type('%s/files/%s/%s/%s?type={vtype}' % (
+                            URLBASE, dpkg['repo'], d['pkg']['name'],
+                            urllib.parse.quote(dpkg['version'])), ('html', 'tsv'))
 
     def test_changelog(self):
         req = requests.get(URLBASE + '/changelog/glibc')
@@ -161,9 +198,7 @@ class TestWebsite(unittest.TestCase):
         self.assertEqual(req.headers['content-type'].lower(), 'text/plain; charset=utf-8')
 
     def test_cleanmirror(self):
-        req = requests.get(URLBASE + '/?type=json')
-        req.raise_for_status()
-        dindex = req.json()
+        dindex = self._test_view_type(URLBASE + '/?type={vtype}')
         repos = []
         for _, cat in dindex['repo_categories']:
             for row in cat:
@@ -213,21 +248,64 @@ class TestWebsite(unittest.TestCase):
                 req.close()
 
     def test_qa_listnumber(self):
-        req = requests.get(URLBASE + '/qa/?type=json')
-        req.raise_for_status()
-        d = req.json()
-        req.close()
+        d = self._test_view_type(URLBASE + '/qa/?type={vtype}', ('html', 'tsv'))
         for rtype in ('src', 'deb'):
             for repo, branch, row in d[rtype + 'issues_matrix']:
                 for k, v in zip(d[rtype + 'issues_key'], row):
-                    req = requests.get('%s/qa/code/%s/%s/%s?type=json' % (
-                                       URLBASE, k, repo, branch))
-                    req.raise_for_status()
-                    dl = req.json()
+                    if random.random() > 0.1:
+                        continue
+                    dl = self._test_view_type('%s/qa/code/%s/%s/%s?type={vtype}'
+                        % (URLBASE, k, repo, branch), ('html', 'tsv'))
                     self.assertEqual(
                         dl["page"]["count"], v[0], '%s: %s/%s' % (k, repo, branch))
                     self.assertEqual(bool(dl["packages"]), bool(v[0]),
                         '%s: %s/%s' % (k, repo, branch))
+
+    def validate_tsv(self, text, rowcount=None):
+        self.assertTrue(text.endswith('\n'))
+        fieldnum = None
+        k = -1
+        for k, ln in enumerate(text.splitlines()):
+            if k:
+                self.assertEqual(len(ln.split('\t')), fieldnum, msg=ln)
+            else:
+                for i, field in enumerate(ln.split('\t')):
+                    self.assertTrue(field, msg=ln)
+                fieldnum = i + 1
+                self.assertGreater(fieldnum, 0, msg=ln)
+        self.assertGreater(k, -1)
+        if rowcount:
+            self.assertEqual(k, rowcount)
+
+    def _test_view_type(self, url, alt=(), **kwargs):
+        template_mimetypes = {
+            'txt': 'text/plain; charset=UTF-8',
+            'tsv': 'text/plain; charset=UTF-8',
+        }
+        req = requests.get(url.format(vtype='json'), **kwargs)
+        self.assertEqual(req.status_code, 200)
+        self.assertEqual(req.headers['Content-Type'], 'application/json')
+        d = req.json()
+        req.close()
+        rowcount = None
+        if 'packages' in d:
+            rowcount = len(d['packages'])
+        for vtype in alt:
+            req = requests.get(url.format(vtype=vtype), **kwargs)
+            self.assertEqual(req.status_code, 200)
+            self.assertEqual(req.headers['Content-Type'],
+                template_mimetypes.get(vtype, 'text/html; charset=UTF-8'))
+            text = req.text
+            req.close()
+            if vtype == 'html':
+                self.assertTrue(text.startswith('<!DOCTYPE html>'))
+                if rowcount:
+                    self.assertGreaterEqual(text.count("<tr>"), rowcount, text)
+            elif vtype == 'txt':
+                self.assertTrue(text.endswith('\n'))
+            elif vtype == 'tsv':
+                self.validate_tsv(text, rowcount)
+        return d
 
     def test_api_version(self):
         req = requests.get(URLBASE + '/api_version')

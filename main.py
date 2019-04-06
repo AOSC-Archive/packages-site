@@ -25,7 +25,7 @@ import psycopg2.extras
 import utils
 import bottle_sqlite
 
-__version__ = '3.0'
+__version__ = '3.1'
 
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
@@ -602,12 +602,32 @@ jinja2_settings = {
 }
 jinja2_template = functools.partial(bottle.jinja2_template,
     template_settings=jinja2_settings)
-isjson = lambda: (
-    bottle.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-    or bottle.request.query.get('type') == 'json')
-render = lambda *args, **kwargs: (
-    kwargs if isjson() else jinja2_template(*args, **kwargs)
-)
+
+template_mimetypes = {
+    'txt': 'text/plain; charset=UTF-8',
+    'tsv': 'text/plain; charset=UTF-8',
+    # this will make a download
+    #'tsv': 'text/tab-separated-values; charset=UTF-8',
+}
+render_type = lambda: (
+    'json' if bottle.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    else bottle.request.query.get('type'))
+
+
+def render(template, alt=None, *args, **kwargs):
+    rtype = render_type()
+    if rtype == 'json':
+        return kwargs
+    if alt is not None:
+        if rtype not in alt:
+            rtype = alt[0]
+        if rtype in template_mimetypes:
+            bottle.response.content_type = template_mimetypes[rtype]
+        return jinja2_template('%s.%s' % (template, rtype), *args, **kwargs)
+    rtype = template.rsplit('.', 1)[-1]
+    if rtype in template_mimetypes:
+        bottle.response.content_type = template_mimetypes[rtype]
+    return jinja2_template(template, *args, **kwargs)
 
 
 def get_pgconn():
@@ -731,10 +751,11 @@ def pkgtrie(db):
 @app.route('/search/')
 def search(db):
     q = bottle.request.query.get('q')
-    noredir = bottle.request.query.get('noredir') or isjson()
+    noredir = bottle.request.query.get('noredir') or render_type() == 'json'
     page, pagesize = get_page()
     if not q:
-        return render('search.html', q=q, packages=[], page=pagination(None))
+        return render('search', alt=('html', 'tsv'),
+            q=q, packages=[], page=pagination(None))
     if not noredir:
         qn = q.strip().lower().replace(' ', '-').replace('_', '-')
         row = db.execute("SELECT 1 FROM packages WHERE name=?", (qn,)).fetchone()
@@ -756,13 +777,15 @@ def search(db):
         d['name_highlight'] = html.escape(d['name']).replace(q, '<b>%s</b>' % q)
         packages.append(d)
     res = utils.Pager(packages, pagesize, page)
-    return render('search.html', q=q, packages=list(res), page=pagination(res))
+    return render('search', alt=('html', 'tsv'),
+        q=q, packages=list(res), page=pagination(res))
 
 @app.route('/query/', method=('GET', 'POST'))
 def query(db):
     q = bottle.request.forms.get('q')
     if not q:
-        return render('query.html', q='', headers=[], rows=[], error=None)
+        return render('query', alt=('html', 'tsv'),
+                      q='', headers=[], rows=[], error=None)
     try:
         proc = subprocess.run(
             ('python3', 'rawquery.py', 'data/abbs.db'),
@@ -770,7 +793,8 @@ def query(db):
         result = pickle.loads(proc.stdout)
     except Exception as ex:
         result = {'error': 'failed to execute query.'}
-    return render('query.html', q=q, headers=result.get('header', ()),
+    return render('query', alt=('html', 'tsv'),
+                  q=q, headers=result.get('header', ()),
                   rows=result.get('rows', ()), error=result.get('error'))
 
 @app.route('/packages/<name>')
@@ -871,7 +895,7 @@ def files(name, version, reponame, branch, db):
     repo = reponame + '/' + branch
     res = db.execute(SQL_GET_PACKAGE_DEB_LOCAL, (name, version, repo)).fetchone()
     if res is None:
-        return bottle.HTTPResponse(render('error.html',
+        return bottle.HTTPResponse(render('error', alt=('html', 'tsv'),
                 error='Package "%s" (%s) not found in %s.' %
                 (name, version, repo)), 404)
     d = dict(res)
@@ -893,7 +917,7 @@ def files(name, version, reponame, branch, db):
                 sodepends.append(soname)
             else:
                 soprovides.append(soname)
-    return render('files.html', pkg=d, files=files,
+    return render('files', alt=('html', 'tsv'), pkg=d, files=files,
         sodepends=sodepends, soprovides=soprovides)
 
 @app.route('/changelog/<name>')
@@ -916,7 +940,7 @@ def changelog(name, db):
 def revdep(name, db):
     res = db.execute('SELECT 1 FROM packages WHERE name = ?', (name,)).fetchone()
     if res is None:
-        return bottle.HTTPResponse(render('error.html',
+        return bottle.HTTPResponse(render('error', alt=('html', 'tsv'),
                 error='Package "%s" not found.' % name), 404)
     revdeps = collections.defaultdict(list)
     for relationship, group in itertools.groupby(
@@ -937,7 +961,9 @@ def revdep(name, db):
         except utils.CircularDependencyError as ex:
             circular = ex.data
         sobreaks.reverse()
-    return render('revdep.html', name=name, revdeps=revdeps,
+    if circular:
+        circular = sorted(circular.keys())
+    return render('revdep', alt=('html', 'tsv'), name=name, revdeps=revdeps,
                   sobreaks=sobreaks, sobreaks_circular=circular)
 
 @app.route('/lagging/<repo:path>')
@@ -945,7 +971,7 @@ def lagging(repo, db):
     page, pagesize = get_page()
     repos = db_repos(db)
     if repo not in repos:
-        return bottle.HTTPResponse(render('error.html',
+        return bottle.HTTPResponse(render('error.html', alt=('html', 'tsv'),
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
     arch = repos[repo]['architecture']
@@ -954,10 +980,10 @@ def lagging(repo, db):
     for row in res:
         packages.append(dict(row))
     if packages:
-        return render('lagging.html',
+        return render('lagging', alt=('html', 'tsv'),
             repo=repo, packages=packages, page=pagination(res))
     else:
-        return render('error.html',
+        return render('error', alt=('html', 'tsv'),
             error="There's no lagging packages.")
 
 @app.route('/srcupd/<tree>')
@@ -965,7 +991,7 @@ def srcupd(tree, db):
     page, pagesize = get_page()
     trees = db_trees(db)
     if tree not in trees:
-        return bottle.HTTPResponse(render('error.html',
+        return bottle.HTTPResponse(render('error', alt=('html', 'tsv'),
                 error='Source tree "%s" not found.' % tree), 404)
     section = bottle.request.query.get('section') or None
     packages = []
@@ -974,10 +1000,11 @@ def srcupd(tree, db):
     for row in res:
         packages.append(dict(row))
     if packages:
-        return render('srcupd.html',
+        return render('srcupd', alt=('html', 'tsv'),
             tree=tree, packages=packages, section=section, page=pagination(res))
     else:
-        return render('error.html', error="There's no lagging packages.")
+        return render('error', alt=('html', 'tsv'),
+            error="There's no outdated packages.")
 
 @app.route('/ghost/<repo:path>')
 def ghost(repo, db):
@@ -991,9 +1018,10 @@ def ghost(repo, db):
     for row in res:
         packages.append(dict(row))
     if packages:
-        return render('ghost.html', repo=repo, packages=packages, page=pagination(res))
+        return render('ghost', alt=('html', 'tsv'),
+            repo=repo, packages=packages, page=pagination(res))
     else:
-        return render('error.html',
+        return render('error', alt=('html', 'tsv'),
             error="There's no ghost packages.")
 
 @app.route('/missing/<repo:path>')
@@ -1011,17 +1039,18 @@ def missing(repo, db):
     for row in res:
         packages.append(dict(row))
     if packages:
-        return render('missing.html',
+        return render('missing', alt=('html', 'tsv'),
             repo=repo, packages=packages, page=pagination(res))
     else:
-        return render('error.html', error="There's no missing packages.")
+        return render('error', alt=('html', 'tsv'),
+            error="There's no missing packages.")
 
 @app.route('/tree/<tree>')
 def tree(tree, db):
     page, pagesize = get_page()
     trees = db_trees(db)
     if tree not in trees:
-        return bottle.HTTPResponse(render('error.html',
+        return bottle.HTTPResponse(render('error', alt=('html', 'tsv'),
                 error='Source tree "%s" not found.' % tree), 404)
     packages = []
     res = utils.Pager(db.execute(SQL_GET_PACKAGE_TREE, (tree,)), pagesize, page)
@@ -1031,9 +1060,10 @@ def tree(tree, db):
         d['ver_compare'] = VER_REL[d['ver_compare']]
         packages.append(d)
     if packages:
-        return render('tree.html', tree=tree, packages=packages, page=pagination(res))
+        return render('tree', alt=('html', 'tsv'),
+            tree=tree, packages=packages, page=pagination(res))
     else:
-        return render('error.html', error="There's no ghost packages.")
+        return render('error', alt=('html', 'tsv'), error="There's no packages.")
 
 @app.route('/list.json')
 def pkg_list(db):
@@ -1058,9 +1088,9 @@ def updates(db):
         d['ver_compare'] = VER_REL[d['ver_compare']]
         packages.append(d)
     if packages:
-        return render('updates.html', packages=packages)
+        return render('updates', alt=('html', 'tsv'), packages=packages)
     else:
-        return render('error.html', error="There's no updates.")
+        return render('error', alt=('html', 'tsv'), error="There's no updates.")
 
 @app.route('/repo/<repo:path>')
 def repo(repo, db):
@@ -1077,7 +1107,8 @@ def repo(repo, db):
         d['ver_compare'] = VER_REL[
             utils.version_compare(latest, fullver) if latest else -1]
         packages.append(d)
-    return render('repo.html', repo=repo, packages=packages, page=pagination(res))
+    return render('repo', alt=('html', 'tsv'),
+        repo=repo, packages=packages, page=pagination(res))
 
 
 @app.route('/qa/')
@@ -1107,7 +1138,7 @@ def qa_index(db):
         if r in deblist else [(0,0)]*len(debissues)) for r in repos]
     debissues_max = max(max(map(operator.itemgetter(1), row[-1]))
         for row in debissues_matrix)
-    return render('qa_index.html', total=numissues,
+    return render('qa_index', alt=('html', 'tsv'), total=numissues,
                   percent=(100*issueratio), recent=recent, olddebs=olddebs,
                   srcissues_key=srcissues, debissues_key=debissues,
                   srcissues_matrix=srcissues_matrix,
@@ -1129,7 +1160,7 @@ def qa_code(db, code, repo=None):
         code = int(code)
         desc = ISSUE_CODE[code]
     except (ValueError, KeyError) as e:
-        return bottle.HTTPResponse(render('error.html',
+        return bottle.HTTPResponse(render('error', alt=('html', 'tsv'),
                 error='Issue code "%s" not found.' % repo), 404)
     if repo:
         res = db.execute(
@@ -1137,7 +1168,7 @@ def qa_code(db, code, repo=None):
             'SELECT name FROM tree_branches WHERE name=?', (repo, repo)
             ).fetchone()
         if res is None:
-            return bottle.HTTPResponse(render('error.html',
+            return bottle.HTTPResponse(render('error', alt=('html', 'tsv'),
                 error='Repo "%s" not found.' % repo), 404)
     page, pagesize = get_page()
     results = []
@@ -1151,7 +1182,8 @@ def qa_code(db, code, repo=None):
             d['versions'] = sorted(d['versions'], key=utils.version_compare_key)
             results.append(d)
         page = pagination(res)
-    return render('qa_code.html', code=code, repo=repo, description=desc,
+    return render('qa_code', alt=('html', 'tsv'),
+                  code=code, repo=repo, description=desc,
                   packages=results, page=page)
 
 
@@ -1222,7 +1254,7 @@ def cleanmirror(repo, db):
 
     repos = db_repos(db)
     if repo not in repos:
-        return bottle.HTTPResponse(render('error.txt',
+        return bottle.HTTPResponse(render('error', alt=('txt', 'tsv'),
                 error='Repo "%s" not found.' % repo), 404,
                 content_type='text/plain; charset=UTF-8')
     debs = []
@@ -1234,8 +1266,7 @@ def cleanmirror(repo, db):
             d = dict(row)
             d['removereason'] = removereason
             debs.append(d)
-    bottle.response.content_type = 'text/plain; charset=UTF-8'
-    return render('cleanmirror.txt', repo=repo, packages=debs)
+    return render('cleanmirror', alt=('txt', 'tsv'), repo=repo, packages=debs)
 
 @app.route('/data/<filename>')
 def data_dl(db, filename):
