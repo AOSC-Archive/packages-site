@@ -84,7 +84,7 @@
 {% for dep in e['files'][0][2]['missing'] -%}
 <li>{% if 'relationship' in dep -%}
 <b class="pkg-field pkg-dep-rel">{{ dep['relationship'] }}</b>:
-{% endif %}{{ dep['package'] }}{% if 'relop' in dep %}
+{% endif %}{{ dep['package'] }}{% if ['relop'] %}
 {{ dep['relop'] }}{{ dep['version'] }}{% endif %}
 </li>
 {%- endfor %}
