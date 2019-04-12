@@ -81,11 +81,11 @@
 <p><b class="pkg-field">Missing dependencies</b>:</p>
 {%- endif %}
 <ul>
-{% for dep in e['files'][0][2]['missing'] -%}
-<li>{% if 'relationship' in dep -%}
-<b class="pkg-field pkg-dep-rel">{{ dep['relationship'] }}</b>:
-{% endif %}{{ dep['package'] }}{% if ['relop'] %}
-{{ dep['relop'] }}{{ dep['version'] }}{% endif %}
+{% for dep in e['files'] -%}
+<li>{% if 'relationship' in dep[2] -%}
+<b class="pkg-field pkg-dep-rel">{{ dep[2]['relationship'] }}</b>:
+{% endif %}{{ dep[1] }}{% if dep[2]['relop'] %}
+{{ dep[2]['relop'] }}{{ dep[2]['version'] }}{% endif %}
 </li>
 {%- endfor %}
 </ul>
