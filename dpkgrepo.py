@@ -193,10 +193,10 @@ def remove_clearsign(blob):
     return b''.join(lines)
 
 def suite_update(db, suite, repos):
-    cur = db.cursor()
     url = urllib.parse.urljoin(MIRROR, '/'.join((
         REPOPATH, 'dists', suite, 'InRelease')))
     req = requests.get(url, timeout=120)
+    cur = db.cursor()
     if req.status_code == 404:
         logging.error('dpkg suite %s not found' % suite)
         for repo in repos:
@@ -208,6 +208,7 @@ def suite_update(db, suite, repos):
             cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo=?',
                 (repo.name,))
             cur.execute('DELETE FROM dpkg_packages WHERE repo=?', (repo.name,))
+        db.commit()
         return {}
     else:
         req.raise_for_status()
@@ -252,8 +253,8 @@ def suite_update(db, suite, repos):
             cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo=?',
                 (repo.name,))
             cur.execute('DELETE FROM dpkg_packages WHERE repo=?', (repo.name,))
-    db.commit()
     cur.close()
+    db.commit()
     return pkgrepos2
 
 _relationship_fields = ('depends', 'pre-depends', 'recommends',
@@ -262,7 +263,6 @@ _relationship_fields = ('depends', 'pre-depends', 'recommends',
 
 def package_update(db, repo, path, size, sha256):
     logging.info(repo.name)
-    cur = db.cursor()
     url = urllib.parse.urljoin(MIRROR, path)
     req = requests.get(url, timeout=120)
     req.raise_for_status()
@@ -271,6 +271,7 @@ def package_update(db, repo, path, size, sha256):
     pkgs = lzma.decompress(req.content).decode('utf-8')
     del req
     packages = {}
+    cur = db.cursor()
     cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo = ?', (repo.name,))
     packages_old = set(cur.execute(
         'SELECT package, version, architecture, repo FROM dpkg_packages'
@@ -324,8 +325,8 @@ def package_update(db, repo, path, size, sha256):
                     ' AND architecture = ? AND repo = ?', pkg)
         cur.execute('DELETE FROM dpkg_package_dependencies WHERE package = ?'
                     ' AND version = ? AND architecture = ? AND repo = ?', pkg)
-    db.commit()
     cur.close()
+    db.commit()
 
 SQL_COUNT_REPO = '''
 REPLACE INTO dpkg_repo_stats
@@ -444,6 +445,7 @@ ORDER BY c1.category, c1.reponame, c1.testing
 
 def stats_update(db):
     db.execute(SQL_COUNT_REPO)
+    db.commit()
 
 def update(db):
     for suite, repos in REPOS.items():
@@ -457,8 +459,7 @@ def main(dbfile):
     db.create_collation("vercomp", version_compare)
     init_db(db)
     update(db)
-    cur = db.cursor()
-    cur.execute('PRAGMA optimize')
+    db.execute('PRAGMA optimize')
     db.commit()
 
 if __name__ == '__main__':
