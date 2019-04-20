@@ -99,7 +99,7 @@ INNER JOIN tree_branches b ON b.branch=mb.tagname AND b.tree=?
 LEFT JOIN marks.marks m ON m.rid=pr.rid
 LEFT JOIN fossil.event ev ON ev.objid=pr.rid
 LEFT JOIN marks.committers cm ON cm.email=ev.user
-WHERE package = ?
+WHERE package = ? AND version IS NOT NULL
 GROUP BY pr.rid
 ORDER BY mtime DESC, pr.rid DESC
 '''
