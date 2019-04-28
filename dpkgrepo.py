@@ -69,7 +69,7 @@ Repo = collections.namedtuple('Repo', (
 MIRROR = os.environ.get('REPO_MIRROR', 'https://repo.aosc.io/')
 REPOPATH = 'debs'
 
-ARCHS = ('amd64', 'arm64', 'armel', 'powerpc', 'ppc64', 'riscv64', 'noarch')
+ARCHS = ('amd64', 'arm64', 'armel', 'i586', 'powerpc', 'ppc64', 'riscv64', 'noarch')
 BRANCHES = ('stable', 'testing', 'explosive')
 OVERLAYS = (
     # dpkg_repos.category, component, source, arch
