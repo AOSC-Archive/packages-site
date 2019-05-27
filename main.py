@@ -971,7 +971,7 @@ def lagging(repo, db):
     page, pagesize = get_page()
     repos = db_repos(db)
     if repo not in repos:
-        return bottle.HTTPResponse(render('error.html', alt=('html', 'tsv'),
+        return bottle.HTTPResponse(render('error', alt=('html', 'tsv'),
                 error='Repo "%s" not found.' % repo), 404)
     packages = []
     arch = repos[repo]['architecture']
