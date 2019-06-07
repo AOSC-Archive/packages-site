@@ -1111,6 +1111,11 @@ def repo(repo, db):
         repo=repo, packages=packages, page=pagination(res))
 
 
+@app.route('/qa')
+def qa_index_redir():
+    bottle.redirect('/qa/', 301)
+
+
 @app.route('/qa/')
 def qa_index(db):
     tree_branches = {r[0]:r[1:] for r in
