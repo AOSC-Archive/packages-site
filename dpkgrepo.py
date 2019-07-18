@@ -232,7 +232,7 @@ def suite_update(db, suite, repos):
             res = cur.execute('SELECT date FROM dpkg_repos WHERE name=?',
                               (repo.name,)).fetchone()
             if res and rel_date:
-                if res[0] >= rel_date:
+                if res[0] and res[0] >= rel_date:
                     continue
             pkgpath = '/'.join((REPOPATH, 'dists', suite, pkgrepo[0]))
             pkgrepos2[repo.component, repo.architecture] = (repo, pkgpath) + pkgrepo[1:]
