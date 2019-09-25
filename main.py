@@ -37,7 +37,7 @@ SELECT
   (spabhost.value IS 'noarch') noarch, spfailarch.value fail_arch,
   spsrc.key srctype, spsrc.value srcurl,
   EXISTS(SELECT 1 FROM package_dependencies revpd
-    WHERE revpd.relationship IN ('PKGDEP', 'BUILDDEP', 'PKGRECOM')
+    WHERE revpd.relationship IN ('PKGDEP', 'BUILDDEP', 'PKGRECOM', 'PKGSUG')
     AND revpd.dependency = v_packages.name) hasrevdep
 FROM v_packages
 LEFT JOIN (
@@ -368,9 +368,8 @@ SQL_GET_PACKAGE_REV_REL = '''
 SELECT
   package, coalesce(relop, '') || coalesce(version, '') version, relationship
 FROM package_dependencies
-WHERE
-  dependency = ? AND (relationship == 'PKGDEP' OR
-  relationship == 'BUILDDEP' OR relationship == 'PKGRECOM')
+WHERE dependency = ?
+AND relationship IN ('PKGDEP', 'BUILDDEP', 'PKGRECOM', 'PKGSUG')
 ORDER BY relationship, package
 '''
 
@@ -480,12 +479,15 @@ DEP_REL = collections.OrderedDict((
     ('PKGREP', 'Replaces'),
     ('PKGRECOM', 'Recommends'),
     ('PKGCONFL', 'Conflicts'),
-    ('PKGBREAK', 'Breaks')
+    ('PKGBREAK', 'Breaks'),
+    ('PKGPROV', 'Provides'),
+    ('PKGSUG', 'Suggests')
 ))
 DEP_REL_REV = collections.OrderedDict((
     ('PKGDEP', 'Depended by'),
     ('BUILDDEP', 'Depended by (build)'),
-    ('PKGRECOM', 'Recommended by')
+    ('PKGRECOM', 'Recommended by'),
+    ('PKGSUG', 'Suggested by')
 ))
 VER_REL = {
     -2: 'deprecated',
