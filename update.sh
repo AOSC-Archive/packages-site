@@ -17,7 +17,8 @@ for repo in $REPOS; do
 done
 python3 $ABBS_META -p . -m . -d abbs.db -b master -B master \
     -c base -u 'https://github.com/AOSC-Dev/aosc-os-core' -P 0 aosc-os-core
-python3 $ABBS_META -p . -m . -d abbs.db -b stable,testing,explosive -B explosive \
+python3 $ABBS_META -p . -m . -d abbs.db \
+    -b stable,stable-proposed,testing,testing-proposed,explosive -B explosive \
     -c base -u 'https://github.com/AOSC-Dev/aosc-os-abbs' -P 1 aosc-os-abbs
 python3 $ABBS_META -p . -m . -d abbs.db -b master -B master \
     -c bsp -u 'https://github.com/AOSC-Dev/aosc-os-arm-bsps' -P 2 aosc-os-arm-bsps
