@@ -70,7 +70,7 @@ MIRROR = os.environ.get('REPO_MIRROR', 'https://repo.aosc.io/')
 REPOPATH = 'debs'
 
 ARCHS = ('amd64', 'arm64', 'armel', 'i586', 'powerpc', 'ppc64', 'riscv64', 'noarch')
-BRANCHES = ('stable', 'stable-proposed', 'testing'， 'testing-proposed', 'explosive')
+BRANCHES = ('stable', 'stable-proposed', 'testing', 'testing-proposed', 'explosive')
 OVERLAYS = (
     # dpkg_repos.category, component, source, arch
     ('base', 'main', None, ARCHS),
