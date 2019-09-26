@@ -10,7 +10,7 @@
 <b class="pkg-field pkg-dep-rel">{{ dep_rel_rev[rel] }}</b>:
 {% for dep in revdeps[rel] -%}
 {% if loop.index != 1 %},{% endif %}
-<span class="pkg-dep"><a href="{{ dep['package'] }}">{{ dep['package'] }}</a>{{ dep['version'] }}</span>
+<span class="pkg-dep"><a href="{{ dep['package'] }}">{{ dep['package'] }}</a>{{ dep['version'] }}{% if dep['architecture'] %} [{{ dep['architecture'] }}]{% endif %}</span>
 {%- endfor %}
 </p>{%- endif %}
 {%- endfor %}

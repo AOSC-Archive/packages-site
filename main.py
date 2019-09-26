@@ -42,7 +42,8 @@ SELECT
 FROM v_packages
 LEFT JOIN (
     SELECT package, group_concat(dependency || '|' || coalesce(relop, '') ||
-      coalesce(version, '') || '|' || relationship) dependency
+      coalesce(version, '') || '|' ||
+      relationship || '|' || architecture) dependency
     FROM package_dependencies
     GROUP BY package
   ) dep
@@ -366,11 +367,12 @@ ORDER BY filename
 
 SQL_GET_PACKAGE_REV_REL = '''
 SELECT
-  package, coalesce(relop, '') || coalesce(version, '') version, relationship
+  package, coalesce(relop, '') || coalesce(version, '') version,
+  relationship, architecture
 FROM package_dependencies
 WHERE dependency = ?
 AND relationship IN ('PKGDEP', 'BUILDDEP', 'PKGRECOM', 'PKGSUG')
-ORDER BY relationship, package
+ORDER BY relationship, package, architecture
 '''
 
 SQL_SEARCH_PACKAGES_DESC = '''
@@ -799,6 +801,17 @@ def query(db):
                   q=q, headers=result.get('header', ()),
                   rows=result.get('rows', ()), error=result.get('error'))
 
+
+def process_db_dependency(dependency_row):
+    if not dependency_row:
+        return {}
+    dep_dict = collections.defaultdict(lambda: collections.defaultdict(list))
+    for dep in dependency_row.split(','):
+        dep_pkg, dep_ver, dep_rel, dep_arch = dep.split('|')
+        dep_dict[dep_rel][dep_arch].append((dep_pkg, dep_ver))
+    return {k:sorted(rel.items()) for k, rel in dep_dict.items()}
+
+
 @app.route('/packages/<name>')
 def package(name, db):
     name = name.strip().lower()
@@ -812,14 +825,7 @@ def package(name, db):
                 error='Package "%s" not found.' % name), 404)
     pkg = dict(res)
     # Process depenencies
-    dep_dict = {}
-    if pkg['dependency']:
-        for dep in pkg['dependency'].split(','):
-            dep_pkg, dep_ver, dep_rel = dep.split('|')
-            if dep_rel in dep_dict:
-                dep_dict[dep_rel].append((dep_pkg, dep_ver))
-            else:
-                dep_dict[dep_rel] = [(dep_pkg, dep_ver)]
+    dep_dict = process_db_dependency(pkg['dependency'])
     pkg['dependency'] = dep_dict
     # Generate version matrix
     fullver = pkg['full_version']
@@ -948,8 +954,12 @@ def revdep(name, db):
     for relationship, group in itertools.groupby(
         db.execute(SQL_GET_PACKAGE_REV_REL, (name,)),
         key=operator.itemgetter('relationship')):
-        for row in group:
-            revdeps[relationship].append(dict(row))
+        for package, pkggroup in itertools.groupby(group,
+            key=operator.itemgetter('package')):
+            for row in pkggroup:
+                revdeps[relationship].append(dict(row))
+                if not row['architecture']:
+                    break
     sobreaks = []
     circular = None
     with get_pgconn() as pgdb:
@@ -1206,14 +1216,7 @@ def qa_package(name, db):
         return bottle.HTTPResponse(render('error.html',
                 error='Package "%s" not found.' % name), 404)
     pkg = dict(res)
-    dep_dict = {}
-    if pkg['dependency']:
-        for dep in pkg['dependency'].split(','):
-            dep_pkg, dep_ver, dep_rel = dep.split('|')
-            if dep_rel in dep_dict:
-                dep_dict[dep_rel].append((dep_pkg, dep_ver))
-            else:
-                dep_dict[dep_rel] = [(dep_pkg, dep_ver)]
+    dep_dict = process_db_dependency(pkg['dependency'])
     pkg['dependency'] = dep_dict
     pkg['versions'] = list(map(dict, db.execute(
         SQL_GET_PACKAGE_VERSIONS, (name,)).fetchall()))

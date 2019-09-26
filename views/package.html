@@ -13,13 +13,15 @@
 {%- endif %}
 {% if pkg['dependency'] -%}
 {% for rel in dep_rel -%}
-{% if rel in pkg['dependency'] -%}<p>
-<b class="pkg-field pkg-dep-rel">{{ dep_rel[rel] }}</b>:
-{% for dep in pkg['dependency'][rel] -%}
-{% if loop.index != 1 %},{% endif %}
-<span class="pkg-dep"><a href="{{ dep[0] }}">{{ dep[0] }}</a>{{ dep[1] }}</span>
-{%- endfor %}
-</p>{%- endif %}
+{% if rel in pkg['dependency'] -%}
+  {% for archrow in pkg['dependency'][rel] -%}<p>
+    <b class="pkg-field pkg-dep-rel">{{ dep_rel[rel] }}</b>{% if archrow[0] %} [{{ archrow[0] }}]{% endif %}:
+    {% for dep in archrow[1] -%}
+    {% if loop.index != 1 %},{% endif %}
+    <span class="pkg-dep"><a href="{{ dep[0] }}">{{ dep[0] }}</a>{{ dep[1] }}{% if dep[2] %} ({{ dep[2] }}){% endif %}</span>
+    {%- endfor %}
+  </p>{%- endfor %}
+{%- endif %}
 {%- endfor %}
 {%- endif %}
 <p><b class="pkg-field">Links</b>:
