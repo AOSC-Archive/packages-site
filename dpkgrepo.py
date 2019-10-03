@@ -132,8 +132,8 @@ def init_db(db):
                 'repo TEXT,'
                 'relationship TEXT,'
                 'value TEXT,'
-                'PRIMARY KEY (package, version, architecture, repo, relationship),'
-                'FOREIGN KEY(package) REFERENCES dpkg_packages(package)'
+                'PRIMARY KEY (package, version, architecture, repo, relationship)'
+                # 'FOREIGN KEY(package) REFERENCES dpkg_packages(package)'
                 ')')
     cur.execute('CREATE TABLE IF NOT EXISTS dpkg_package_duplicate ('
                 'package TEXT,'
