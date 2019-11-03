@@ -122,6 +122,57 @@ static int vercomp_collation(
     return comp;
 }
 
+static void compare_dpkgrel(
+    sqlite3_context *ctx, int argc, sqlite3_value **argv
+){
+    if (argc != 3) {
+        sqlite3_result_null(ctx);
+        return;
+    }
+    int nver1, nver2;
+    char *sver1, *sver2;
+    int cmp_result, result;
+
+    const char *pver1 = (const char *)sqlite3_value_text(argv[0]);
+    nver1 = strlen(pver1);
+    sver1 = (char *)malloc(nver1);
+    memcpy(sver1, pver1, nver1);
+
+    const char *pver2 = (const char *)sqlite3_value_text(argv[2]);
+    nver2 = strlen(pver2);
+    sver2 = (char *)malloc(nver2);
+    memcpy(sver2, pver2, nver2);
+
+    cmp_result = vercomp_collation(NULL, nver1, sver1, nver2, sver2);
+
+    free(sver1);
+    free(sver2);
+
+    const char *p_op = (const char *)sqlite3_value_text(argv[1]);
+
+    /* < and > are actually <= and >= in dpkg.
+     * Only <<, <=, =, >= and >> are actually allowed.
+     * <, >, == are provided for compatibility.
+     * https://www.debian.org/doc/debian-policy/ch-relationships.html
+     */
+    if (!strcmp(p_op, "=") || !strcmp(p_op, "==")) {
+        result = (cmp_result == 0);
+    } else if (!strcmp(p_op, "<<") || !strcmp(p_op, "<")) {
+        result = (cmp_result < 0);
+    } else if (!strcmp(p_op, "<=")) {
+        result = (cmp_result <= 0);
+    } else if (!strcmp(p_op, ">=")) {
+        result = (cmp_result >= 0);
+    } else if (!strcmp(p_op, ">>") || !strcmp(p_op, ">")) {
+        result = (cmp_result > 0);
+    } else {
+        sqlite3_result_null(ctx);
+        return;
+    }
+    sqlite3_result_int(ctx, result);
+    return;
+}
+
 #ifdef _WIN32
 __declspec(dllexport)
 #endif
@@ -133,8 +184,12 @@ int sqlite3_modvercomp_init(
     int rc = SQLITE_OK;
     SQLITE_EXTENSION_INIT2(pApi);
     UNUSED(pzErrMsg);
-    rc = sqlite3_create_collation(db, "vercomp",
-                                  SQLITE_UTF8, NULL, vercomp_collation);
+    rc = sqlite3_create_collation(
+        db, "vercomp", SQLITE_UTF8, NULL, vercomp_collation);
+    if (rc) return rc;
+    rc = sqlite3_create_function(
+        db, "compare_dpkgrel", 3, SQLITE_UTF8 | SQLITE_DETERMINISTIC,
+        NULL, compare_dpkgrel, NULL, NULL);
     return rc;
 }
 

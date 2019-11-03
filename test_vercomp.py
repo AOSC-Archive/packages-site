@@ -6,16 +6,38 @@ import unittest
 
 class TestVercomp(unittest.TestCase):
 
+    op_list = frozenset(('<<', '<=', '=', '>=', '>>'))
+
+    op_same = {
+        '>': ('>>', '>='),
+        '<': ('<<', '<='),
+        '==': ('=', '>=', '<='),
+    }
+
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.db.enable_load_extension(True)
         self.db.execute("SELECT load_extension(?)", ('./mod_vercomp.so',))
         self.db.enable_load_extension(False)
 
-    def _test_comparison(self, v1, cmp_oper, v2):
+    def _test_comparison_coll(self, v1, cmp_oper, v2):
         res = self.db.execute(
             'SELECT (? %s ? COLLATE vercomp)' % cmp_oper, (v1, v2)).fetchone()[0]
         self.assertTrue(res == 1, "(%r %s %r) == %s" % (v1, cmp_oper, v2, res))
+
+    def _test_comparison_func(self, v1, cmp_oper, v2, result=1):
+        res = self.db.execute(
+            'SELECT compare_dpkgrel(?, ?, ?)', (v1, cmp_oper, v2)).fetchone()[0]
+        self.assertTrue(
+            res == result, "(%r %s %r) == %s" % (v1, cmp_oper, v2, res))
+
+    def _test_comparison(self, v1, cmp_oper, v2):
+        self._test_comparison_coll(v1, cmp_oper, v2)
+        func_opers = self.op_same.get(cmp_oper, (cmp_oper,))
+        for oper in func_opers:
+            self._test_comparison_func(v1, oper, v2)
+        for oper in self.op_list.difference(frozenset(func_opers)):
+            self._test_comparison_func(v1, oper, v2, 0)
 
     def test_comparisons(self):
         """Test comparison against all combinations of Version classes"""
