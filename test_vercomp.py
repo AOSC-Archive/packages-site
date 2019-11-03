@@ -66,6 +66,13 @@ class TestVercomp(unittest.TestCase):
         self._test_comparison('1.5~rc1', '<', '1.5~rc2')
         self._test_comparison('1.5~rc1', '>', '1.5~dev0')
 
+        self._test_comparison_func('1.5~rc1', '>', None, None)
+        self._test_comparison_func('1.5~rc1', None, None, 1)
+        self._test_comparison_func(None, None, None, None)
+        self._test_comparison_func(None, '=', None, None)
+        self._test_comparison_func(None, '=', '1', None)
+        self._test_comparison_func(1, '<', 2, 1)
+
 
 if __name__ == '__main__':
     unittest.main()

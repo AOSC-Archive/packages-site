@@ -129,6 +129,19 @@ static void compare_dpkgrel(
         sqlite3_result_null(ctx);
         return;
     }
+    if (sqlite3_value_type(argv[0]) == SQLITE_NULL) {
+        sqlite3_result_null(ctx);
+        return;
+    }
+    if (sqlite3_value_type(argv[1]) == SQLITE_NULL) {
+        sqlite3_result_int(ctx, 1);
+        return;
+    }
+    if (sqlite3_value_type(argv[2]) == SQLITE_NULL) {
+        sqlite3_result_null(ctx);
+        return;
+    }
+
     int nver1, nver2;
     char *sver1, *sver2;
     int cmp_result, result;
@@ -165,6 +178,8 @@ static void compare_dpkgrel(
         result = (cmp_result >= 0);
     } else if (!strcmp(p_op, ">>") || !strcmp(p_op, ">")) {
         result = (cmp_result > 0);
+    } else if (p_op[0] == 0) {
+        result = 1;
     } else {
         sqlite3_result_null(ctx);
         return;
