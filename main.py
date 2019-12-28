@@ -1303,8 +1303,7 @@ def data_dl(db, filename):
         'Vary': 'Accept-Encoding',
         'Content-Type': 'application/x-sqlite3; charset=binary',
         'Content-Length': fsize,
-        'Content-Disposition': 'attachment; filename="%s"' % attachfn,
-        'Cache-Control': 'no-store, no-transform'
+        'Content-Disposition': 'attachment; filename="%s"' % attachfn
     }
     stat = os.stat(gzfile)
     mtime = stat.st_mtime
