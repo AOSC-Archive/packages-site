@@ -28,7 +28,10 @@ import collections
 import urllib.parse
 from email.utils import parsedate
 
-import requests
+try:
+    import httpx as requests
+except ImportError:
+    import requests
 
 import deb822
 from utils import version_compare
