@@ -100,6 +100,7 @@ static int dpkg_version_compare(char *svera, char *sverb){
     return version_compare(vera.revision, verb.revision);
 }
 
+/* SQLite collation: vercomp */
 static int vercomp_collation(
     void *pArg, int nSa, const void *bSa, int nSb, const void *bSb
 ){
@@ -122,6 +123,9 @@ static int vercomp_collation(
     return comp;
 }
 
+/* SQLite function:
+ * compare_dpkgrel(version_a, operator, version_b) -> int
+ */
 static void compare_dpkgrel(
     sqlite3_context *ctx, int argc, sqlite3_value **argv
 ){
@@ -188,6 +192,88 @@ static void compare_dpkgrel(
     return;
 }
 
+
+/* SQLite function: dpkg_version(version, release, epoch) -> text
+ *
+ * (CASE WHEN ifnull(epoch, '') = '' THEN ''
+ *  ELSE epoch || ':' END) || version ||
+ * (CASE WHEN ifnull(release, '') IN ('', '0') THEN ''
+ *  ELSE '-' || release END)
+ */
+
+static void make_dpkg_version(
+    sqlite3_context *ctx, int argc, sqlite3_value **argv
+){
+    if (argc != 3) {
+        sqlite3_result_null(ctx);
+        return;
+    }
+    if (sqlite3_value_type(argv[0]) == SQLITE_NULL) {
+        sqlite3_result_null(ctx);
+        return;
+    }
+
+    const char *p_version = (const char *)sqlite3_value_text(argv[0]);
+    const char *p_release;
+    const char *p_epoch;
+    char *s_fullver;
+    char *ptr;
+    int n_version = strlen(p_version);
+    int n_release = 0;
+    int n_epoch = 0;
+    int n_fullver = n_version;
+    if (sqlite3_value_type(argv[1]) != SQLITE_NULL) {
+        p_release = (const char *)sqlite3_value_text(argv[1]);
+        n_release = strlen(p_release);
+        if (n_release > 0 && strcmp(p_release, "0") == 0) {
+            n_release = 0;
+        }
+    }
+    if (sqlite3_value_type(argv[2]) != SQLITE_NULL) {
+        p_epoch = (const char *)sqlite3_value_text(argv[2]);
+        n_epoch = strlen(p_epoch);
+    }
+    if (n_release) {
+        n_fullver += n_release + 1;
+    }
+    if (n_epoch) {
+        n_fullver += n_epoch + 1;
+    }
+    s_fullver = (char *)malloc(n_fullver);
+    ptr = s_fullver;
+    if (n_epoch) {
+        memcpy(ptr, p_epoch, n_epoch);
+        ptr += n_epoch;
+        *ptr = ':';
+        ptr++;
+    }
+    memcpy(ptr, p_version, n_version);
+    ptr += n_version;
+    if (n_release) {
+        *ptr = '-';
+        ptr++;
+        memcpy(ptr, p_release, n_release);
+        ptr += n_release;
+    }
+    sqlite3_result_text(ctx, s_fullver, n_fullver, free);
+    return;
+}
+
+int modvercomp_install(sqlite3 *db){
+    int rc = SQLITE_OK;
+    rc = sqlite3_create_collation(
+        db, "vercomp", SQLITE_UTF8, NULL, vercomp_collation);
+    if (rc) return rc;
+    rc = sqlite3_create_function(
+        db, "compare_dpkgrel", 3, SQLITE_UTF8 | SQLITE_DETERMINISTIC,
+        NULL, compare_dpkgrel, NULL, NULL);
+    if (rc) return rc;
+    rc = sqlite3_create_function(
+        db, "dpkg_version", 3, SQLITE_UTF8 | SQLITE_DETERMINISTIC,
+        NULL, make_dpkg_version, NULL, NULL);
+    return rc;
+}
+
 #ifdef _WIN32
 __declspec(dllexport)
 #endif
@@ -196,15 +282,8 @@ int sqlite3_modvercomp_init(
     char **pzErrMsg,
     const sqlite3_api_routines *pApi
 ){
-    int rc = SQLITE_OK;
     SQLITE_EXTENSION_INIT2(pApi);
     UNUSED(pzErrMsg);
-    rc = sqlite3_create_collation(
-        db, "vercomp", SQLITE_UTF8, NULL, vercomp_collation);
-    if (rc) return rc;
-    rc = sqlite3_create_function(
-        db, "compare_dpkgrel", 3, SQLITE_UTF8 | SQLITE_DETERMINISTIC,
-        NULL, compare_dpkgrel, NULL, NULL);
-    return rc;
+    return modvercomp_install(db);
 }
 

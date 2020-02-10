@@ -73,6 +73,27 @@ class TestVercomp(unittest.TestCase):
         self._test_comparison_func(None, '=', '1', None)
         self._test_comparison_func(1, '<', 2, 1)
 
+    def _test_dpkg_version(self, version, release, epoch, result):
+        res = self.db.execute(
+            'SELECT dpkg_version(?, ?, ?)',
+            (version, release, epoch)).fetchone()[0]
+        self.assertEqual(res, result)
+
+    def test_dpkg_version(self):
+        self._test_dpkg_version(None, None, None, None);
+        self._test_dpkg_version('1.2.3', None, None, '1.2.3')
+        self._test_dpkg_version('1.2.3', '', None, '1.2.3')
+        self._test_dpkg_version('1.2.3', '0', None, '1.2.3')
+        self._test_dpkg_version('1.2.3', '1', None, '1.2.3-1')
+        self._test_dpkg_version('1.2.3', None, '', '1.2.3')
+        self._test_dpkg_version('1.2.3', None, '2', '2:1.2.3');
+        self._test_dpkg_version('1.2.3', '0', '2', '2:1.2.3');
+        self._test_dpkg_version('1.2.3', '3', None, '1.2.3-3')
+        self._test_dpkg_version('1.2.3', '3', '', '1.2.3-3');
+        self._test_dpkg_version('1.2.3', '3', '1', '1:1.2.3-3');
+        self._test_dpkg_version('1.2.3', '3', '222', '222:1.2.3-3');
+        self._test_dpkg_version('1.2.3', '3', 222, '222:1.2.3-3');
+        self._test_dpkg_version(1, 2, 3, '3:1-2');
 
 if __name__ == '__main__':
     unittest.main()
