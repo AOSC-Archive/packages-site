@@ -101,7 +101,7 @@ static int dpkg_version_compare(char *svera, char *sverb){
 }
 
 /* SQLite collation: vercomp */
-static int vercomp_collation(
+int vercomp_collation(
     void *pArg, int nSa, const void *bSa, int nSb, const void *bSb
 ){
     char *svera, *sverb;
@@ -126,7 +126,7 @@ static int vercomp_collation(
 /* SQLite function:
  * compare_dpkgrel(version_a, operator, version_b) -> int
  */
-static void compare_dpkgrel(
+void compare_dpkgrel(
     sqlite3_context *ctx, int argc, sqlite3_value **argv
 ){
     if (argc != 3) {
@@ -201,7 +201,7 @@ static void compare_dpkgrel(
  *  ELSE '-' || release END)
  */
 
-static void make_dpkg_version(
+void make_dpkg_version(
     sqlite3_context *ctx, int argc, sqlite3_value **argv
 ){
     if (argc != 3) {
@@ -259,7 +259,7 @@ static void make_dpkg_version(
     return;
 }
 
-int modvercomp_install(sqlite3 *db){
+static int modvercomp_install(sqlite3 *db){
     int rc = SQLITE_OK;
     rc = sqlite3_create_collation(
         db, "vercomp", SQLITE_UTF8, NULL, vercomp_collation);
