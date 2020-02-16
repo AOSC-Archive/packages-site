@@ -35,7 +35,6 @@ except ImportError:
     import requests
 
 import deb822
-from utils import version_compare
 
 logging.basicConfig(
     format='%(asctime)s %(levelname).1s %(message)s', level=logging.INFO)
@@ -491,6 +490,7 @@ def main(argv):
             os.path.join(os.path.dirname(__file__), 'mod_vercomp.so'))
         db.load_extension(extpath)
     except sqlite3.OperationalError:
+        from utils import version_compare
         db.create_collation("vercomp", version_compare)
     db.enable_load_extension(False)
     init_db(db)
