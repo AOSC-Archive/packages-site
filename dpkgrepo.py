@@ -24,6 +24,7 @@ import sqlite3
 import hashlib
 import logging
 import calendar
+import argparse
 import collections
 import urllib.parse
 from email.utils import parsedate
@@ -68,8 +69,6 @@ Repo = collections.namedtuple('Repo', (
     'architecture', # deb source architecture
 ))
 
-# we don't have gpg, must be https
-MIRROR = os.environ.get('REPO_MIRROR', 'https://repo.aosc.io/')
 REPOPATH = 'debs'
 
 ARCHS = ('amd64', 'arm64', 'armel', 'i586', 'powerpc', 'ppc64', 'riscv64', 'noarch')
@@ -195,12 +194,28 @@ def remove_clearsign(blob):
                 lines.append(ln)
     return b''.join(lines)
 
-def suite_update(db, suite, repos):
-    url = urllib.parse.urljoin(MIRROR, '/'.join((
-        REPOPATH, 'dists', suite, 'InRelease')))
+def download_catalog(url, local=False, timeout=120, ignore404=False):
+    if local:
+        urlsp = urllib.parse.urlsplit(url)
+        filename = (urlsp.netloc + urlsp.path).replace('/', '_')
+        try:
+            with open('/var/lib/apt/lists/' + filename, 'rb') as f:
+                content = f.read()
+            return content
+        except FileNotFoundError:
+            pass
     req = requests.get(url, timeout=120)
+    if ignore404 and req.status_code == 404:
+        return None
+    req.raise_for_status()
+    return req.content
+
+def suite_update(db, mirror, suite, repos, local=False):
+    url = urllib.parse.urljoin(mirror, '/'.join((
+        REPOPATH, 'dists', suite, 'InRelease')))
+    content = download_catalog(url, local)
     cur = db.cursor()
-    if req.status_code == 404:
+    if content is None:
         logging.error('dpkg suite %s not found' % suite)
         for repo in repos:
             cur.execute('UPDATE dpkg_repos SET origin=null, label=null, '
@@ -213,9 +228,7 @@ def suite_update(db, suite, repos):
             cur.execute('DELETE FROM dpkg_packages WHERE repo=?', (repo.name,))
         db.commit()
         return {}
-    else:
-        req.raise_for_status()
-    releasetxt = remove_clearsign(req.content).decode('utf-8')
+    releasetxt = remove_clearsign(content).decode('utf-8')
     rel = deb822.Release(releasetxt)
     pkgrepos = {}
     for item in rel['SHA256']:
@@ -264,15 +277,13 @@ _relationship_fields = ('depends', 'pre-depends', 'recommends',
         'suggests', 'breaks', 'conflicts', 'provides', 'replaces',
         'enhances')
 
-def package_update(db, repo, path, size, sha256):
+def package_update(db, mirror, repo, path, size, sha256, local=False):
     logging.info(repo.name)
-    url = urllib.parse.urljoin(MIRROR, path)
-    req = requests.get(url, timeout=120)
-    req.raise_for_status()
-    assert len(req.content) == size
-    assert hashlib.sha256(req.content).hexdigest() == sha256
-    pkgs = lzma.decompress(req.content).decode('utf-8')
-    del req
+    url = urllib.parse.urljoin(mirror, path)
+    content = download_catalog(url, local)
+    assert len(content) == size
+    assert hashlib.sha256(content).hexdigest() == sha256
+    pkgs = lzma.decompress(content).decode('utf-8')
     packages = {}
     cur = db.cursor()
     cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo = ?', (repo.name,))
@@ -450,21 +461,43 @@ def stats_update(db):
     db.execute(SQL_COUNT_REPO)
     db.commit()
 
-def update(db):
+def update(db, mirror, branches=None, arch=None, local=False):
+    branches = frozenset(branches if branches else ())
     for suite, repos in REPOS.items():
-        pkgrepos = suite_update(db, suite, repos)
+        if branches and suite not in branches:
+            continue
+        pkgrepos = suite_update(db, mirror, suite, repos, local)
         for repo, path, size, sha256 in pkgrepos.values():
-            package_update(db, repo, path, size, sha256)
+            if arch and repo.architecture != arch:
+                continue
+            package_update(db, mirror, repo, path, size, sha256, local)
     stats_update(db)
 
-def main(dbfile):
-    db = sqlite3.connect(dbfile)
-    db.create_collation("vercomp", version_compare)
+def main(argv):
+    parser = argparse.ArgumentParser(description="Get package info from DPKG sources.")
+    parser.add_argument("-l", "--local", help="Try local apt cache", action='store_true')
+    parser.add_argument("-b", "--branch", help="Only get this branch, can be specified multiple times", action='append')
+    parser.add_argument("-a", "--arch", help="Only get this architecture")
+    parser.add_argument("-m", "--mirror", help="Set mirror location, https is recommended. This overrides environment variable REPO_MIRROR. ",
+        default=os.environ.get('REPO_MIRROR', 'https://repo.aosc.io/')
+    )
+    parser.add_argument("dbfile", help="abbs database file")
+    args = parser.parse_args(argv)
+
+    db = sqlite3.connect(args.dbfile)
+    try:
+        db.enable_load_extension(True)
+        extpath = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), 'mod_vercomp.so'))
+        db.load_extension(extpath)
+    except sqlite3.OperationalError:
+        db.create_collation("vercomp", version_compare)
+    db.enable_load_extension(False)
     init_db(db)
-    update(db)
+    update(db, args.mirror, args.branch, args.arch, args.local)
     db.execute('PRAGMA optimize')
     db.commit()
 
 if __name__ == '__main__':
     import sys
-    sys.exit(main(*sys.argv[1:]))
+    sys.exit(main(sys.argv[1:]))
