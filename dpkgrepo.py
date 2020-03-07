@@ -68,14 +68,13 @@ Repo = collections.namedtuple('Repo', (
     'architecture', # deb source architecture
 ))
 
-REPOPATH = 'debs'
-
 ARCHS = ('amd64', 'arm64', 'armel', 'i586', 'powerpc', 'ppc64', 'riscv64', 'noarch')
 BRANCHES = ('stable', 'stable-proposed', 'testing', 'testing-proposed', 'explosive')
 OVERLAYS = (
     # dpkg_repos.category, component, source, arch
     ('base', 'main', None, ARCHS),
     ('bsp', 'bsp-sunxi', 'aosc-os-arm-bsps', ('armel', 'arm64', 'noarch')),
+    ('bsp', 'bsp-rk', 'aosc-os-arm-bsps', ('armel', 'arm64', 'noarch')),
     ('overlay', 'opt-avx2', None, ('amd64',)),
     ('overlay', 'opt-g4', None, ('powerpc',)),
 )
@@ -93,12 +92,16 @@ for category, component, source, archs in OVERLAYS:
             ))
 
 
+def _url_slash(url):
+    if url[-1] == '/':
+        return url
+    return url + '/'
+
 def init_db(db):
     cur = db.cursor()
     cur.execute('CREATE TABLE IF NOT EXISTS dpkg_repos ('
                 'name TEXT PRIMARY KEY,' # key: bsp-sunxi-armel/testing
                 'realname TEXT,'    # group key: amd64, bsp-sunxi-armel
-                'path TEXT,'
                 'source_tree TEXT,' # abbs tree
                 'category TEXT,' # base, bsp, overlay
                 'testing INTEGER,'    # 0, 1, 2
@@ -200,6 +203,7 @@ def download_catalog(url, local=False, timeout=120, ignore404=False):
         try:
             with open('/var/lib/apt/lists/' + filename, 'rb') as f:
                 content = f.read()
+            print(url, local)
             return content
         except FileNotFoundError:
             pass
@@ -209,13 +213,19 @@ def download_catalog(url, local=False, timeout=120, ignore404=False):
     req.raise_for_status()
     return req.content
 
-def suite_update(db, mirror, suite, repos, local=False):
-    url = urllib.parse.urljoin(mirror, '/'.join((
-        REPOPATH, 'dists', suite, 'InRelease')))
+def suite_update(db, mirror, suite, repos=None, local=False, force=False):
+    """
+    Fetch and parse InRelease file. Update relavant metadata.
+    suite: branch
+    repos: list of Repos
+    """
+    url = urllib.parse.urljoin(mirror, '/'.join(('dists', suite, 'InRelease')))
     content = download_catalog(url, local)
     cur = db.cursor()
     if content is None:
         logging.error('dpkg suite %s not found' % suite)
+        if not repos:
+            return {}
         for repo in repos:
             cur.execute('UPDATE dpkg_repos SET origin=null, label=null, '
                 'codename=null, date=null, valid_until=null, description=null '
@@ -229,48 +239,62 @@ def suite_update(db, mirror, suite, repos, local=False):
         return {}
     releasetxt = remove_clearsign(content).decode('utf-8')
     rel = deb822.Release(releasetxt)
-    pkgrepos = {}
+    pkgrepos = []
     for item in rel['SHA256']:
         path = item['name'].split('/')
         if path[-1] == 'Packages.xz':
             arch = path[1].split('-')[-1]
             if arch == 'all':
                 arch = 'noarch'
-            pkgrepos[path[0], arch] = (
-                item['name'], int(item['size']), item['sha256'])
+            component = path[0]
+            if component == 'main':
+                realname = arch
+            else:
+                realname = '%s-%s' % (component, arch)
+            name = '%s/%s' % (realname, suite)
+            repo = Repo(name, realname, None, 'base', 0, suite, component, arch)
+            pkgrepos.append(
+                (repo, item['name'], int(item['size']), item['sha256']))
     rel_date = calendar.timegm(parsedate(rel['Date'])) if 'Date' in rel else None
-    rel_valid = calendar.timegm(parsedate(rel['Valid-Until'])) if 'Valid-Until' in rel else None
-    pkgrepos2 = {}
-    for repo in repos:
-        pkgrepo = pkgrepos.get((repo.component, repo.architecture))
-        if pkgrepo:
-            res = cur.execute('SELECT date FROM dpkg_repos WHERE name=?',
-                              (repo.name,)).fetchone()
-            if res and rel_date:
-                if res[0] and res[0] >= rel_date:
-                    continue
-            pkgpath = '/'.join((REPOPATH, 'dists', suite, pkgrepo[0]))
-            pkgrepos2[repo.component, repo.architecture] = (repo, pkgpath) + pkgrepo[1:]
-            cur.execute('REPLACE INTO dpkg_repos VALUES '
-                '(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)', (
-                repo.name, repo.realname, REPOPATH,
-                repo.source_tree, repo.category, repo.testing, repo.suite,
-                repo.component, repo.architecture, rel.get('Origin'),
-                rel.get('Label'), rel.get('Codename'), rel_date, rel_valid,
-                rel.get('Description')
-            ))
-        else:
-            cur.execute('UPDATE dpkg_repos SET origin=null, label=null, '
-                'codename=null, date=null, valid_until=null, description=null '
-                'WHERE name=?', (repo.name,))
-            cur.execute('DELETE FROM dpkg_package_dependencies WHERE repo=?',
-                (repo.name,))
-            cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo=?',
-                (repo.name,))
-            cur.execute('DELETE FROM dpkg_packages WHERE repo=?', (repo.name,))
+    rel_valid = None
+    if 'Valid-Until' in rel:
+        rel_valid = calendar.timegm(parsedate(rel['Valid-Until']))
+    result_repos = {}
+    repo_dict = {}
+    if repos:
+        repo_dict = {(r.component, r.architecture): r for r in repos}
+    for pkgrepo, filename, size, sha256 in pkgrepos:
+        try:
+            repo = repo_dict.pop((pkgrepo.component, pkgrepo.architecture))
+        except KeyError:
+            repo = pkgrepo
+        res = cur.execute('SELECT date FROM dpkg_repos WHERE name=?',
+                          (repo.name,)).fetchone()
+        if res and rel_date and not force:
+            if res[0] and res[0] >= rel_date:
+                continue
+        pkgpath = '/'.join(('dists', suite, filename))
+        result_repos[repo.component, repo.architecture] = (repo, pkgpath, size, sha256)
+        cur.execute('REPLACE INTO dpkg_repos VALUES '
+            '(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?)', (
+            repo.name, repo.realname,
+            repo.source_tree, repo.category, repo.testing, repo.suite,
+            repo.component, repo.architecture, rel.get('Origin'),
+            rel.get('Label'), rel.get('Codename'), rel_date, rel_valid,
+            rel.get('Description')
+        ))
+    for repo in repo_dict.values():
+        cur.execute('UPDATE dpkg_repos SET origin=null, label=null, '
+            'codename=null, date=null, valid_until=null, description=null '
+            'WHERE name=?', (repo.name,))
+        cur.execute('DELETE FROM dpkg_package_dependencies WHERE repo=?',
+            (repo.name,))
+        cur.execute('DELETE FROM dpkg_package_duplicate WHERE repo=?',
+            (repo.name,))
+        cur.execute('DELETE FROM dpkg_packages WHERE repo=?', (repo.name,))
     cur.close()
     db.commit()
-    return pkgrepos2
+    return result_repos
 
 _relationship_fields = ('depends', 'pre-depends', 'recommends',
         'suggests', 'breaks', 'conflicts', 'provides', 'replaces',
@@ -280,8 +304,10 @@ def package_update(db, mirror, repo, path, size, sha256, local=False):
     logging.info(repo.name)
     url = urllib.parse.urljoin(mirror, path)
     content = download_catalog(url, local)
-    assert len(content) == size
-    assert hashlib.sha256(content).hexdigest() == sha256
+    if len(content) != size:
+        logging.warning('%s size %d != %d', url, len(content), size)
+    elif hashlib.sha256(content).hexdigest() != sha256:
+        logging.warning('%s sha256 mismatch', url)
     pkgs = lzma.decompress(content).decode('utf-8')
     packages = {}
     cur = db.cursor()
@@ -460,25 +486,54 @@ def stats_update(db):
     db.execute(SQL_COUNT_REPO)
     db.commit()
 
-def update(db, mirror, branches=None, arch=None, local=False):
+def update(db, mirror, branches=None, arch=None, local=False, force=False):
     branches = frozenset(branches if branches else ())
     for suite, repos in REPOS.items():
         if branches and suite not in branches:
             continue
-        pkgrepos = suite_update(db, mirror, suite, repos, local)
+        pkgrepos = suite_update(db, mirror, suite, repos, local, force)
         for repo, path, size, sha256 in pkgrepos.values():
             if arch and repo.architecture != arch:
                 continue
             package_update(db, mirror, repo, path, size, sha256, local)
     stats_update(db)
 
+def update_sources_list(db, filename, branches=None, arch=None, local=False, force=False):
+    with open(filename, 'r', encoding='utf-8') as f:
+        for ln in f:
+            if ln[0] == '#':
+                continue
+            hashpos = ln.find('#')
+            if hashpos != -1:
+                ln = ln[:hashpos]
+            fields = ln.strip().split()
+            if not fields:
+                continue
+            elif fields[0] != 'deb':
+                continue
+            elif branches and fields[2] not in branches:
+                continue
+            mirror = _url_slash(fields[1])
+            pkgrepos = suite_update(db, mirror, fields[2], None, local, force)
+            for repo, path, size, sha256 in pkgrepos.values():
+                if arch and repo.architecture != arch:
+                    continue
+                package_update(db, mirror, repo, path, size, sha256, local)
+    stats_update(db)
+
 def main(argv):
     parser = argparse.ArgumentParser(description="Get package info from DPKG sources.")
     parser.add_argument("-l", "--local", help="Try local apt cache", action='store_true')
+    parser.add_argument("-f", "--force", help="Force update", action='store_true')
     parser.add_argument("-b", "--branch", help="Only get this branch, can be specified multiple times", action='append')
     parser.add_argument("-a", "--arch", help="Only get this architecture")
-    parser.add_argument("-m", "--mirror", help="Set mirror location, https is recommended. This overrides environment variable REPO_MIRROR. ",
-        default=os.environ.get('REPO_MIRROR', 'https://repo.aosc.io/')
+    parser.add_argument("-m", "--mirror",
+        help="Set mirror location, https is recommended. "
+             "This overrides environment variable REPO_MIRROR. ",
+        default=os.environ.get('REPO_MIRROR', 'https://repo.aosc.io/debs')
+    )
+    parser.add_argument("-s", "--sources-list",
+        help="Use specified sources.list file as repo list."
     )
     parser.add_argument("dbfile", help="abbs database file")
     args = parser.parse_args(argv)
@@ -494,7 +549,14 @@ def main(argv):
         db.create_collation("vercomp", version_compare)
     db.enable_load_extension(False)
     init_db(db)
-    update(db, args.mirror, args.branch, args.arch, args.local)
+    if args.sources_list:
+        update_sources_list(
+            db, args.sources_list, args.branch, args.arch, args.local, args.force)
+    else:
+        update(
+            db, _url_slash(args.mirror),
+            args.branch, args.arch, args.local, args.force
+        )
     db.execute('PRAGMA optimize')
     db.commit()
 
