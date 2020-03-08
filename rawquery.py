@@ -5,7 +5,6 @@ import os
 import sys
 import pickle
 import sqlite3
-from utils import version_compare
 
 SQLITE_FUNCTION = 31
 MAX_ROW = 10000
@@ -22,7 +21,12 @@ urifn = os.path.normpath(sys.argv[1]).replace('?', '%3f').replace('#', '%23')
 
 try:
     conn = sqlite3.connect('file:%s?mode=ro' % urifn, uri=True)
-    conn.create_collation("vercomp", version_compare)
+    try:
+        conn.enable_load_extension(True)
+        conn.execute("SELECT load_extension('./mod_vercomp.so')")
+        conn.enable_load_extension(False)
+    except sqlite3.Error:
+        pass
     conn.set_authorizer(sql_auth)
     cur = conn.cursor()
     cur.execute(sys.stdin.read())
