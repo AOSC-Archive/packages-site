@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ pkg['name'] }} - QA - AOSC OS Packages{% endblock %}
+{% block navpath %}<li class="nav-path"><a href="/qa/">QA</a></li>{% endblock %}
 {% block banner %}<h1>{{ pkg['name'] }}
 {% if pkg['version'] %}<span class="pkg-version">{{ pkg['version'] }}</span>{% if pkg['release'] %}-<span class="pkg-version pkg-release">{{ pkg['release'] }}</span>{% endif %}{% endif %}
 </h1>
@@ -8,6 +9,7 @@
 
 {% block main %}
 <div class="package" id="{{ pkg['name'] }}">
+<section class="pkg-info">
 {% if pkg['tree'] -%}
 <p><b class="pkg-field">Section</b>: {{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}</p>
 {%- endif %}
@@ -34,6 +36,7 @@
 {% if not issues %}
 <p class="tips">No issues. Keep up the good work.</p>
 {% endif %}
+</section>
 
 {% for issue in issues %}
 <h2 id="{{ issue['errno'] }}" class="pkg-issue">Issue {{ issue['errno'] }}</h2>

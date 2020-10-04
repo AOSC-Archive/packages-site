@@ -2,7 +2,7 @@
 {% block extraheader -%}
 <link rel="canonical" href="https://packages.aosc.io/">
 {%- endblock %}
-{% block banner %}<h1>AOSC OS Packages</h1>
+{% block banner %}<h1><span><img class="logo" src="/static/aosc.png" width="42px" height="42px">/Packages</span></h1>
 <p class="description">AOSC OS has a total of <span class="num">{{ total }}</span> packages{# across <span class="num">{{ archs }}</span> architectures #}.</p>
 {% endblock %}
 {% block main %}
@@ -27,6 +27,7 @@
 </tbody>
 </table>
 <h2>Repositories and Trees</h2>
+<p>See also: <a href="/qa/">Package Quality Assurance</a></p>
 <table class="packages">
 <tbody>
   <tr>
@@ -46,7 +47,6 @@
   </tr>
 {%- endif %}
 {% for repo in repos -%}
-{% if not repo['testing'] or repo['pkgcount'] -%}
   <tr class="repo-row{{ ' repo-testing' if repo['testing'] else '' }}">
     {% if repo['testingonly'] -%}
     <td class="repo-name repo-name">{{ repo['name'] }}</td>
@@ -75,7 +75,6 @@
       <time datetime="{{ repo['date']|strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ repo['date']|strftime('%Y-%m-%d %H:%M') }}</time>
     </td>
   </tr>
-{%- endif %}
 {%- endfor %}
 {%- endfor %}
   <tr>
