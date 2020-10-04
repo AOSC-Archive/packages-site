@@ -9,11 +9,25 @@
 <link rel="icon" sizes="any" type="image/svg+xml" href="/static/aosc.svg">
 <link rel="apple-touch-icon-precomposed" href="/static/aosc.svg">
 {% block extraheader %}{% endblock %}
+<link rel="stylesheet" href="/static/fonts.css">
 <link rel="stylesheet" href="/static/style.css">
 <script src="/static/autocomplete.js"></script>
 </head>
 <body>
-{% include 'nav.inc.html' %}
+<nav class="navbar navbar-default" id="nav">
+  <div class="container container-navbar">
+  <ul class="navbar-ul">
+    <li class="nav-path"><a href="https://aosc.io">AOSC</a></li>
+    <li class="nav-path"><a href="/">Packages</a></li>
+    {% block navpath %}{% endblock %}
+    <li class="afe-highlight">
+      <form id="searchbox" action="/search/" method="get">
+        <input name="q" id="searchinput" placeholder="Search package">
+      </form>
+    </li>
+  </ul>
+  </div>
+</nav>
 <a name="top"></a>
 <header class="banner">
 <div class="container">

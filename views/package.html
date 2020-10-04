@@ -8,6 +8,7 @@
 
 {% block main %}
 <div class="package" id="{{ pkg['name'] }}">
+<section class="pkg-info">
 {% if pkg['tree'] -%}
 <p><b class="pkg-field">Section</b>: {{ pkg['category'] + '-' if pkg['category'] else '' }}{{ pkg['section'] }}</p>
 {%- endif %}
@@ -44,6 +45,7 @@
 {%- endif %}
 </p>
 {%- endif %}
+</section>
 <h2>Available versions</h2>
 {% if pkg['full_version'] is none -%}
 <p class="pkg-deprecated">(Deprecated)</p>
