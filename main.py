@@ -739,7 +739,7 @@ def makefullver(epoch, version, release):
     return v
 
 
-@app.route('/static/<filename>')
+@app.route('/static/<filename:path>')
 def server_static(filename):
     return bottle.static_file(filename, root='static')
 
