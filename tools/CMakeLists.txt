@@ -16,6 +16,9 @@ DESTINATION "${LIBEXEC_PATH}/tools/abbs-meta/")
 install(FILES
     dpkgrepo-meta/deb822.py
     dpkgrepo-meta/dpkgrepo.py
-    dpkgrepo-meta/update.sh
     "${CMAKE_CURRENT_BINARY_DIR}/mod_vercomp.so"
 DESTINATION "${LIBEXEC_PATH}/tools/dpkgrepo-meta/")
+
+install(FILES
+    dpkgrepo-meta/update.sh
+DESTINATION "${LIBEXEC_PATH}/tools/dpkgrepo-meta/" PERMISSIONS WORLD_EXECUTE)
