@@ -16,7 +16,7 @@ add_subdirectory(views)
 add_subdirectory(tools)
 
 install(TARGETS dbhash DESTINATION bin)
-install(TARGETS mod_vercomp DESTINATION ${LIBEXEC_PATH} PERMISSIONS WORLD_EXECUTE)
+install(TARGETS mod_vercomp DESTINATION ${LIBEXEC_PATH} PERMISSIONS OWNER_WRITE WORLD_READ WORLD_EXECUTE)
 install(FILES
     bottle_sqlite.py
     debian_support.py

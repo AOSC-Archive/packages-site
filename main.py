@@ -552,7 +552,7 @@ application = app = bottle.Bottle()
 plugin = bottle_sqlite.Plugin(
     dbfile='data/abbs.db',
     readonly=True,
-    extensions=('./mod_vercomp.so',)
+    extensions=('./mod_vercomp',)
     # collations={'vercomp': utils.version_compare}
 )
 app.install(plugin)
