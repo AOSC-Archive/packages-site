@@ -25,7 +25,7 @@ import psycopg2.extras
 import utils
 import bottle_sqlite
 
-__version__ = '3.1'
+__version__ = '3.1.1'
 
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
