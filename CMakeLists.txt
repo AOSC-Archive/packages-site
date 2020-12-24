@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 cmake_policy(SET CMP0048 NEW)
 
-project(packages-site VERSION 3.1.1)
+project(packages-site VERSION 3.1.2)
 set(LIBEXEC_PATH "libexec/packages-site")
 
 find_package(SQLite3 REQUIRED)
