@@ -21,4 +21,4 @@ DESTINATION "${LIBEXEC_PATH}/tools/dpkgrepo-meta/")
 
 install(FILES
     dpkgrepo-meta/update.sh
-DESTINATION "${LIBEXEC_PATH}/tools/dpkgrepo-meta/" PERMISSIONS WORLD_EXECUTE)
+DESTINATION "${LIBEXEC_PATH}/tools/dpkgrepo-meta/" PERMISSIONS OWNER_WRITE WORLD_READ WORLD_EXECUTE)
