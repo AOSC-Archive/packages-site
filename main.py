@@ -25,7 +25,7 @@ import psycopg2.extras
 import utils
 import bottle_sqlite
 
-__version__ = '3.1'
+__version__ = '3.1.2'
 
 SQL_GET_PACKAGES = 'SELECT name, description, full_version FROM v_packages'
 
@@ -552,7 +552,7 @@ application = app = bottle.Bottle()
 plugin = bottle_sqlite.Plugin(
     dbfile='data/abbs.db',
     readonly=True,
-    extensions=('./mod_vercomp.so',)
+    extensions=('./mod_vercomp',)
     # collations={'vercomp': utils.version_compare}
 )
 app.install(plugin)
@@ -795,7 +795,7 @@ def query(db):
             ('python3', 'rawquery.py', 'data/abbs.db'),
             input=q.encode('utf-8'), stdout=subprocess.PIPE, check=True)
         result = pickle.loads(proc.stdout)
-    except Exception as ex:
+    except Exception:
         result = {'error': 'failed to execute query.'}
     return render('query', alt=('html', 'tsv'),
                   q=q, headers=result.get('header', ()),
@@ -954,7 +954,7 @@ def revdep(name, db):
     for relationship, group in itertools.groupby(
         db.execute(SQL_GET_PACKAGE_REV_REL, (name,)),
         key=operator.itemgetter('relationship')):
-        for package, pkggroup in itertools.groupby(group,
+        for _, pkggroup in itertools.groupby(group,
             key=operator.itemgetter('package')):
             for row in pkggroup:
                 revdeps[relationship].append(dict(row))
@@ -1176,7 +1176,7 @@ def qa_code(db, code, repo=None):
     try:
         code = int(code)
         desc = ISSUE_CODE[code]
-    except (ValueError, KeyError) as e:
+    except (ValueError, KeyError):
         return bottle.HTTPResponse(render('error', alt=('html', 'tsv'),
                 error='Issue code "%s" not found.' % repo), 404)
     if repo:
@@ -1208,10 +1208,8 @@ def qa_code(db, code, repo=None):
 def qa_package(name, db):
     name = name.strip()
     res = db.execute(SQL_GET_PACKAGE_INFO, (name,)).fetchone()
-    pkgintree = True
     if res is None:
         res = db.execute(SQL_GET_PACKAGE_INFO_GHOST, (name,)).fetchone()
-        pkgintree = False
     if res is None:
         return bottle.HTTPResponse(render('error.html',
                 error='Package "%s" not found.' % name), 404)
@@ -1220,7 +1218,6 @@ def qa_package(name, db):
     pkg['dependency'] = dep_dict
     pkg['versions'] = list(map(dict, db.execute(
         SQL_GET_PACKAGE_VERSIONS, (name,)).fetchall()))
-    contents = collections.defaultdict(lambda: collections.defaultdict(list))
     issues = []
     with get_pgconn() as pgdb:
         cur = pgdb.cursor()

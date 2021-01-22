@@ -3,6 +3,7 @@
 {% block extraheader -%}
 <link rel="canonical" href="https://packages.aosc.io/qa/">
 {%- endblock %}
+{% block navpath %}<li class="nav-path"><a href="/qa/">QA</a></li>{% endblock %}
 {% block banner %}<h1>Package Quality Assurance</h1>
 <p class="description">There are <span class="num">{{ total }}</span> (<span class="num">{{ '%.2f'|format(percent) }}</span>%) package{% if total > 1 %}s{% endif %} with problems. See also: <a href="code/">Issue code definition</a></p>
 {% endblock %}
