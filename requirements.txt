@@ -1,3 +1,5 @@
 requests
 jinja2
 bottle
+psycopg2
+python-debian

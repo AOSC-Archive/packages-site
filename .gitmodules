@@ -1,0 +1,9 @@
+[submodule "tools/dpkgrepo-meta"]
+	path = tools/dpkgrepo-meta
+	url = https://github.com/AOSC-Dev/dpkgrepo-meta.git
+[submodule "tools/abbs-meta"]
+	path = tools/abbs-meta
+	url = https://github.com/AOSC-Dev/abbs-meta.git
+[submodule "tools/piss"]
+	path = tools/piss
+	url = https://github.com/AOSC-Dev/piss.git
