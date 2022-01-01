@@ -27,6 +27,8 @@ jobs:
     - name: Query tag name
       uses: little-core-labs/get-git-tag@v3.0.2
     - name: Build
+      env:
+        CFLAGS: '-flto -O3 -march=znver1'
       shell: bash
       run: ./.ci/build.sh
     - name: Upload
