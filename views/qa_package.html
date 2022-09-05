@@ -31,7 +31,7 @@
 {% if pkg['hasrevdep'] -%}
 <a href="/revdep/{{ pkg['name']|urlencode }}">Reverse dependency</a>,
 {%- endif %}
-<a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/issues/new?template=bug-report.md&title={{ pkg['name']|urlencode }}%3A%20">Report issues</a></p>
+<a href="https://github.com/AOSC-Dev/{{ pkg['tree'] }}/issues/new?template=bug-report.yaml&title={{ pkg['name']|urlencode }}%3A%20">Report issues</a></p>
 
 {% if not issues %}
 <p class="tips">No issues. Keep up the good work.</p>
